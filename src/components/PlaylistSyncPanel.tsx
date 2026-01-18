@@ -25,17 +25,29 @@ const TIER_OPTIONS: { value: FunnelTier; label: string }[] = [
   { value: 'pick', label: 'Pick' },
 ]
 
-function getSongsForTier(theme: MusicLeagueTheme, tier: FunnelTier): Song[] {
+function getSongsForTier(theme: MusicLeagueTheme, tier: FunnelTier, includeMuted = true): Song[] {
+  let songs: Song[]
   switch (tier) {
     case 'pick':
-      return theme.pick ? [theme.pick] : []
+      songs = theme.pick ? [theme.pick] : []
+      break
     case 'finalists':
-      return theme.finalists
+      songs = theme.finalists
+      break
     case 'semifinalists':
-      return theme.semifinalists
+      songs = theme.semifinalists
+      break
     case 'candidates':
-      return theme.candidates
+      songs = theme.candidates
+      break
   }
+  // Filter out muted songs unless explicitly including them
+  return includeMuted ? songs : songs.filter(s => !s.isMuted)
+}
+
+// Get song count excluding muted songs (for playlist sync display)
+function getPlayableSongCount(theme: MusicLeagueTheme, tier: FunnelTier): number {
+  return getSongsForTier(theme, tier, false).length
 }
 
 export function PlaylistSyncPanel({ theme, className }: PlaylistSyncPanelProps): React.ReactElement {
@@ -46,12 +58,15 @@ export function PlaylistSyncPanel({ theme, className }: PlaylistSyncPanelProps):
   const [error, setError] = useState<string | null>(null)
 
   const hasPlaylist = !!theme.spotifyPlaylist
-  const songs = getSongsForTier(theme, selectedTier)
-  const songCount = songs.length
+  const allSongs = getSongsForTier(theme, selectedTier)
+  const playableSongs = getSongsForTier(theme, selectedTier, false) // Exclude muted
+  const songCount = allSongs.length
+  const playableCount = playableSongs.length
+  const mutedCount = songCount - playableCount
 
   const handleSync = async (): Promise<void> => {
-    if (songCount === 0) {
-      setError('No songs in this tier to sync')
+    if (playableCount === 0) {
+      setError(mutedCount > 0 ? 'All songs in this tier are muted' : 'No songs in this tier to sync')
       return
     }
 
@@ -72,7 +87,7 @@ export function PlaylistSyncPanel({ theme, className }: PlaylistSyncPanelProps):
       const result = await spotifyService.createOrSyncTierPlaylist(
         title,
         description,
-        songs,
+        playableSongs, // Exclude muted songs
         theme.spotifyPlaylist?.playlistId
       )
 
@@ -120,17 +135,22 @@ export function PlaylistSyncPanel({ theme, className }: PlaylistSyncPanelProps):
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {TIER_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label} ({getSongsForTier(theme, opt.value).length})
-              </SelectItem>
-            ))}
+            {TIER_OPTIONS.map((opt) => {
+              const total = getSongsForTier(theme, opt.value).length
+              const playable = getPlayableSongCount(theme, opt.value)
+              const muted = total - playable
+              return (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label} ({playable}{muted > 0 ? `, ${muted} muted` : ''})
+                </SelectItem>
+              )
+            })}
           </SelectContent>
         </Select>
 
         <Button
           onClick={handleSync}
-          disabled={isSyncing || songCount === 0}
+          disabled={isSyncing || playableCount === 0}
           size="sm"
           className="gap-1"
         >
@@ -181,6 +201,16 @@ export function PlaylistSyncPanel({ theme, className }: PlaylistSyncPanelProps):
           No songs in {selectedTier}. Add songs to sync.
         </p>
       )}
+      {songCount > 0 && playableCount === 0 && (
+        <p className="text-xs text-muted-foreground">
+          All {songCount} songs in {selectedTier} are muted. Unmute some to sync.
+        </p>
+      )}
+      {mutedCount > 0 && playableCount > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {mutedCount} muted song{mutedCount > 1 ? 's' : ''} will be excluded from playlist.
+        </p>
+      )}
     </div>
   )
 }
@@ -194,7 +224,7 @@ export function QuickSyncButton({ theme }: { theme: MusicLeagueTheme }): React.R
     // Sync finalists by default, or semifinalists if no finalists
     const tier: FunnelTier = theme.finalists.length > 0 ? 'finalists' :
       theme.semifinalists.length > 0 ? 'semifinalists' : 'candidates'
-    const songs = getSongsForTier(theme, tier)
+    const songs = getSongsForTier(theme, tier, false) // Exclude muted
 
     if (songs.length === 0) return
 

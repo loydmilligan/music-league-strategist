@@ -10,6 +10,8 @@ import {
   Sparkles,
   Info,
   Ticket,
+  VolumeX,
+  Volume2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -125,7 +127,7 @@ function SongCard({
   isFirst,
   isLast,
 }: SongCardProps): React.ReactElement {
-  const { promoteSong, demoteSong, removeSongFromTier, activeTheme } = useMusicLeagueStore()
+  const { promoteSong, demoteSong, removeSongFromTier, toggleMuted, activeTheme } = useMusicLeagueStore()
   const theme = activeTheme()
 
   const nextTier = getNextTier(tier)
@@ -154,12 +156,20 @@ function SongCard({
     removeSongFromTier(themeId, song.id, tier)
   }
 
+  const handleToggleMuted = (): void => {
+    toggleMuted(themeId, song.id)
+  }
+
   // Show star ratings if available
   const hasRatings = song.ratings && (song.ratings.theme > 0 || song.ratings.general > 0)
+  const isMuted = song.isMuted || false
 
   if (compact) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs">
+      <div className={cn(
+        "flex items-center justify-between gap-2 rounded border px-2 py-1 text-xs",
+        isMuted && "opacity-50 bg-muted/50"
+      )}>
         {showRank && (
           <div className="flex items-center gap-1">
             <span className="w-4 text-center font-medium text-muted-foreground">
@@ -186,7 +196,7 @@ function SongCard({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{song.title}</p>
+          <p className={cn("truncate font-medium", isMuted && "line-through")}>{song.title}</p>
           <p className="truncate text-muted-foreground">{song.artist}</p>
         </div>
         <div className="flex items-center gap-1">
@@ -201,7 +211,20 @@ function SongCard({
               <Info className="h-3 w-3" />
             </Button>
           )}
-          {nextTier && canPromote && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={handleToggleMuted}
+            title={isMuted ? 'Unmute (include in playlists)' : 'Mute (exclude from playlists)'}
+          >
+            {isMuted ? (
+              <Volume2 className="h-3 w-3 text-muted-foreground" />
+            ) : (
+              <VolumeX className="h-3 w-3 text-muted-foreground" />
+            )}
+          </Button>
+          {nextTier && canPromote && !isMuted && (
             <Button
               variant="ghost"
               size="icon"
@@ -229,7 +252,10 @@ function SongCard({
   }
 
   return (
-    <div className="rounded-lg border p-2 transition-colors hover:bg-accent/50">
+    <div className={cn(
+      "rounded-lg border p-2 transition-colors hover:bg-accent/50",
+      isMuted && "opacity-50 bg-muted/30"
+    )}>
       <div className="flex items-start justify-between gap-2">
         {showRank && (
           <div className="flex items-center gap-1 pt-0.5">
@@ -265,7 +291,7 @@ function SongCard({
           )}
           onClick={() => onInfoClick?.(song)}
         >
-          <p className="truncate font-medium text-sm">{song.title}</p>
+          <p className={cn("truncate font-medium text-sm", isMuted && "line-through")}>{song.title}</p>
           <p className="truncate text-xs text-muted-foreground">{song.artist}</p>
           {song.year && song.genre && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -301,7 +327,20 @@ function SongCard({
               <Info className="h-4 w-4 text-muted-foreground" />
             </Button>
           )}
-          {nextTier && canPromote && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={handleToggleMuted}
+            title={isMuted ? 'Unmute (include in playlists)' : 'Mute (exclude from playlists)'}
+          >
+            {isMuted ? (
+              <Volume2 className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <VolumeX className="h-4 w-4 text-muted-foreground" />
+            )}
+          </Button>
+          {nextTier && canPromote && !isMuted && (
             <Button
               variant="ghost"
               size="icon"

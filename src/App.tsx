@@ -4,6 +4,7 @@ import { MusicLeagueStrategist } from '@/components/MusicLeagueStrategist'
 import { SettingsModal } from '@/components/SettingsModal'
 import { SongsILikeButton } from '@/components/SongsILikePanel'
 import { CompetitorAnalysisPanel } from '@/components/CompetitorAnalysisPanel'
+import { HelpModal } from '@/components/HelpModal'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 function App(): React.ReactElement {
@@ -21,6 +22,7 @@ function App(): React.ReactElement {
           <span className="font-semibold">Music League Strategist</span>
         </div>
         <div className="flex items-center gap-1">
+          <HelpModal />
           <SongsILikeButton />
           <CompetitorAnalysisPanel />
           <SettingsModal

@@ -61,6 +61,7 @@ export interface Song {
   spotifyUri?: string
   isFavorite?: boolean   // User marked as favorite
   isEliminated?: boolean // User explicitly eliminated
+  isMuted?: boolean      // Muted songs stay in funnel but are excluded from playlists
   userNotes?: string     // User's markdown notes about the song
   ratings?: SongRatings  // User's 5-star ratings
   aiDescription?: string // AI-generated description (cached)

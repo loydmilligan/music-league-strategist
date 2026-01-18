@@ -116,6 +116,7 @@ interface MusicLeagueState {
   setCandidates: (songs: Song[]) => void  // Legacy alias
   updateCandidate: (songId: string, updates: Partial<Song>) => void
   toggleFavorite: (songId: string) => void
+  toggleMuted: (themeId: string, songId: string) => void
 
   // === Legacy Finalists Management ===
   setFinalists: (songs: Song[]) => void
@@ -713,6 +714,24 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
               ...s,
               workingCandidates: (s.workingCandidates || []).map(toggleSong),
               candidates: s.candidates.map(toggleSong),
+              updatedAt: Date.now(),
+            }
+          }),
+        }))
+      },
+
+      toggleMuted: (themeId, songId) => {
+        set((state) => ({
+          themes: state.themes.map((t) => {
+            if (t.id !== themeId) return t
+            const toggleSong = (song: Song) =>
+              song.id === songId ? { ...song, isMuted: !song.isMuted } : song
+            return {
+              ...t,
+              candidates: t.candidates.map(toggleSong),
+              semifinalists: t.semifinalists.map(toggleSong),
+              finalists: t.finalists.map(toggleSong),
+              pick: t.pick && t.pick.id === songId ? { ...t.pick, isMuted: !t.pick.isMuted } : t.pick,
               updatedAt: Date.now(),
             }
           }),
