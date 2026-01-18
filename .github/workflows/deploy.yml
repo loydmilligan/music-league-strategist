@@ -32,8 +32,10 @@ jobs:
 
           # Copy built files
           rm -rf /home/dietpi/music-league-strategist/dist
+          rm -rf /home/dietpi/music-league-strategist/api
           cp -r ${{ github.workspace }}/dist /home/dietpi/music-league-strategist/
           cp -r ${{ github.workspace }}/docker /home/dietpi/music-league-strategist/
+          cp -r ${{ github.workspace }}/api /home/dietpi/music-league-strategist/
           cp ${{ github.workspace }}/docker-compose.yml /home/dietpi/music-league-strategist/
 
           # Rebuild and start
