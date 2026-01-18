@@ -216,6 +216,7 @@ export function SongDetailSlideout({
   const [editTitle, setEditTitle] = useState('')
   const [editArtist, setEditArtist] = useState('')
   const [isRetriggering, setIsRetriggering] = useState(false)
+  const [isFindingYouTube, setIsFindingYouTube] = useState(false)
 
   // Reset state when song changes
   useEffect(() => {
@@ -234,6 +235,7 @@ export function SongDetailSlideout({
       setEditTitle(song.title)
       setEditArtist(song.artist)
       setIsRetriggering(false)
+      setIsFindingYouTube(false)
     }
   }, [song?.id])
 
@@ -427,6 +429,37 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
     }
     setIsEditingSearch(false)
   }, [song])
+
+  // Find YouTube link from Spotify via Songlink
+  const handleFindYouTubeFromSpotify = useCallback(async () => {
+    const spotifyId = song?.spotifyTrackId || enrichedSpotifyId
+    if (!song || !themeId || !spotifyId) return
+
+    setIsFindingYouTube(true)
+    try {
+      const spotifyUrl = `https://open.spotify.com/track/${spotifyId}`
+      const links = await spotifyService.getCrossPlatformLinks(spotifyUrl)
+
+      if (links.youtube) {
+        // Update local state
+        setEnrichedYoutubeId(links.youtube.videoId)
+
+        // Update the song in the store
+        updateSongInTheme(themeId, song.id, {
+          youtubeVideoId: links.youtube.videoId,
+          youtubeUrl: links.youtube.url,
+        })
+
+        console.log('[Songlink] Found YouTube from Spotify:', links.youtube.videoId)
+      } else {
+        console.warn('[Songlink] No YouTube link found for Spotify track:', spotifyId)
+      }
+    } catch (error) {
+      console.error('[Songlink] Failed to find YouTube link:', error)
+    } finally {
+      setIsFindingYouTube(false)
+    }
+  }, [song, themeId, enrichedSpotifyId, updateSongInTheme])
 
   // Search query for YouTube/Spotify
   const searchQuery = useMemo(() => {
@@ -691,6 +724,29 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
                 trackId={effectiveSpotifyId}
                 searchQuery={searchQuery}
               />
+
+              {/* Find YouTube from Spotify button - shows when Spotify exists but YouTube doesn't */}
+              {effectiveSpotifyId && !effectiveYoutubeId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={handleFindYouTubeFromSpotify}
+                  disabled={isFindingYouTube}
+                >
+                  {isFindingYouTube ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Finding YouTube link...
+                    </>
+                  ) : (
+                    <>
+                      <Youtube className="h-4 w-4 text-red-500" />
+                      Find on YouTube via Songlink
+                    </>
+                  )}
+                </Button>
+              )}
 
               {/* YouTube Player */}
               <YouTubeButton
