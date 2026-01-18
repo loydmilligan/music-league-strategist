@@ -1285,7 +1285,10 @@ app.post('/migrate', async (req, res) => {
         // Generate new UUID for theme if needed
         const newThemeId = isValidUUID(theme.id) ? theme.id : generateUUID()
 
-        // Insert theme
+        // Insert theme (ensure JSONB fields are properly formatted)
+        const hallPassesUsed = theme.hallPassesUsed ? JSON.stringify(theme.hallPassesUsed) : '{"semifinals": false, "finals": false}'
+        const spotifyPlaylist = theme.spotifyPlaylist ? JSON.stringify(theme.spotifyPlaylist) : null
+
         await client.query(`
           INSERT INTO themes (id, raw_theme, interpretation, strategy, title, status, deadline, phase, hall_passes_used, spotify_playlist, created_at, updated_at)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -1301,10 +1304,10 @@ app.post('/migrate', async (req, res) => {
             spotify_playlist = EXCLUDED.spotify_playlist,
             updated_at = EXCLUDED.updated_at
         `, [
-          newThemeId, theme.rawTheme, theme.interpretation, theme.strategy,
-          theme.title, theme.status, theme.deadline, theme.phase,
-          theme.hallPassesUsed, theme.spotifyPlaylist,
-          theme.createdAt, theme.updatedAt
+          newThemeId, theme.rawTheme || '', theme.interpretation || null, theme.strategy || null,
+          theme.title || theme.rawTheme?.slice(0, 50) || 'Untitled', theme.status || 'active', theme.deadline || null, theme.phase || 'brainstorm',
+          hallPassesUsed, spotifyPlaylist,
+          theme.createdAt || now, theme.updatedAt || now
         ])
 
         // Migrate songs for each tier (generate new UUIDs for non-UUID IDs)
@@ -1317,16 +1320,20 @@ app.post('/migrate', async (req, res) => {
             const newSongId = isValidUUID(song.id) ? song.id : generateUUID()
             songIdMap.set(song.id, newSongId)
 
+            // Ensure JSONB fields are properly formatted
+            const songRatings = song.ratings ? JSON.stringify(song.ratings) : null
+            const songPromotionHistory = song.promotionHistory ? JSON.stringify(song.promotionHistory) : '[]'
+
             await client.query(`
               INSERT INTO songs (id, title, artist, album, year, genre, reason, question, youtube_video_id, youtube_url, spotify_track_id, spotify_uri, is_favorite, is_eliminated, is_muted, user_notes, ratings, ai_description, promotion_history, created_at)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
               ON CONFLICT (id) DO NOTHING
             `, [
-              newSongId, song.title, song.artist, song.album, song.year, song.genre,
-              song.reason, song.question, song.youtubeVideoId, song.youtubeUrl,
-              song.spotifyTrackId, song.spotifyUri, song.isFavorite || false,
-              song.isEliminated || false, song.isMuted || false, song.userNotes,
-              song.ratings, song.aiDescription, song.promotionHistory || [], now
+              newSongId, song.title || '', song.artist || '', song.album || null, song.year || null, song.genre || null,
+              song.reason || null, song.question || null, song.youtubeVideoId || null, song.youtubeUrl || null,
+              song.spotifyTrackId || null, song.spotifyUri || null, song.isFavorite || false,
+              song.isEliminated || false, song.isMuted || false, song.userNotes || null,
+              songRatings, song.aiDescription || null, songPromotionHistory, now
             ])
 
             await client.query(`
@@ -1343,16 +1350,20 @@ app.post('/migrate', async (req, res) => {
           const newSongId = isValidUUID(song.id) ? song.id : generateUUID()
           songIdMap.set(song.id, newSongId)
 
+          // Ensure JSONB fields are properly formatted
+          const pickRatings = song.ratings ? JSON.stringify(song.ratings) : null
+          const pickPromotionHistory = song.promotionHistory ? JSON.stringify(song.promotionHistory) : '[]'
+
           await client.query(`
             INSERT INTO songs (id, title, artist, album, year, genre, reason, question, youtube_video_id, youtube_url, spotify_track_id, spotify_uri, is_favorite, is_eliminated, is_muted, user_notes, ratings, ai_description, promotion_history, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
             ON CONFLICT (id) DO NOTHING
           `, [
-            newSongId, song.title, song.artist, song.album, song.year, song.genre,
-            song.reason, song.question, song.youtubeVideoId, song.youtubeUrl,
-            song.spotifyTrackId, song.spotifyUri, song.isFavorite || false,
-            song.isEliminated || false, song.isMuted || false, song.userNotes,
-            song.ratings, song.aiDescription, song.promotionHistory || [], now
+            newSongId, song.title || '', song.artist || '', song.album || null, song.year || null, song.genre || null,
+            song.reason || null, song.question || null, song.youtubeVideoId || null, song.youtubeUrl || null,
+            song.spotifyTrackId || null, song.spotifyUri || null, song.isFavorite || false,
+            song.isEliminated || false, song.isMuted || false, song.userNotes || null,
+            pickRatings, song.aiDescription || null, pickPromotionHistory, now
           ])
 
           await client.query(`
@@ -1366,6 +1377,9 @@ app.post('/migrate', async (req, res) => {
 
     // Migrate user profile
     if (userProfile) {
+      // Ensure JSONB field is properly formatted
+      const categories = userProfile.categories ? JSON.stringify(userProfile.categories) : '{}'
+
       await client.query(`
         INSERT INTO user_profile (user_id, summary, categories, evidence_count, weight, updated_at)
         VALUES ('default', $1, $2, $3, $4, $5)
@@ -1375,7 +1389,7 @@ app.post('/migrate', async (req, res) => {
           evidence_count = EXCLUDED.evidence_count,
           weight = EXCLUDED.weight,
           updated_at = EXCLUDED.updated_at
-      `, [userProfile.summary, userProfile.categories, userProfile.evidenceCount, userProfile.weight, now])
+      `, [userProfile.summary || '', categories, userProfile.evidenceCount || 0, userProfile.weight || 0.5, now])
 
       if (userProfile.longTermPreferences) {
         for (const pref of userProfile.longTermPreferences) {
@@ -1412,17 +1426,23 @@ app.post('/migrate', async (req, res) => {
 
     // Migrate settings
     if (settings) {
+      // Ensure JSONB field is properly formatted
+      const settingsJson = typeof settings === 'string' ? settings : JSON.stringify(settings)
+
       await client.query(`
         INSERT INTO settings (user_id, settings, updated_at)
         VALUES ('default', $1, $2)
         ON CONFLICT (user_id) DO UPDATE SET
           settings = EXCLUDED.settings,
           updated_at = EXCLUDED.updated_at
-      `, [settings, now])
+      `, [settingsJson, now])
     }
 
     // Migrate competitor analysis
     if (competitorAnalysis) {
+      // Ensure JSONB field is properly formatted - store the entire object as data
+      const competitorDataJson = typeof competitorAnalysis === 'string' ? competitorAnalysis : JSON.stringify(competitorAnalysis)
+
       await client.query(`
         INSERT INTO competitor_analysis (user_id, league_name, data, imported_at)
         VALUES ('default', $1, $2, $3)
@@ -1430,7 +1450,7 @@ app.post('/migrate', async (req, res) => {
           league_name = EXCLUDED.league_name,
           data = EXCLUDED.data,
           imported_at = EXCLUDED.imported_at
-      `, [competitorAnalysis.leagueName, competitorAnalysis, now])
+      `, [competitorAnalysis.leagueName || null, competitorDataJson, now])
     }
 
     await client.query('COMMIT')
