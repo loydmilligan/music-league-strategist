@@ -1,0 +1,46 @@
+name: Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to Pi
+        run: |
+          # Stop existing container
+          cd /home/dietpi/music-league-strategist
+          docker compose down || true
+
+          # Copy built files
+          rm -rf /home/dietpi/music-league-strategist/dist
+          cp -r ${{ github.workspace }}/dist /home/dietpi/music-league-strategist/
+          cp -r ${{ github.workspace }}/docker /home/dietpi/music-league-strategist/
+          cp ${{ github.workspace }}/docker-compose.yml /home/dietpi/music-league-strategist/
+
+          # Rebuild and start
+          cd /home/dietpi/music-league-strategist
+          docker compose up -d --build
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          curl -f http://localhost:3000/health || exit 1
