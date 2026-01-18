@@ -41,6 +41,11 @@ interface SettingsState {
   setYouTubeMusicConfig: (config: Partial<YouTubeMusicConfig>) => void
   setNtfyConfig: (config: Partial<NtfyConfig>) => void
   resetToDefaults: () => void
+
+  // Server sync methods (for PostgreSQL persistence)
+  setSpotify: (config: SpotifyConfig) => void
+  setYoutubeMusic: (config: YouTubeMusicConfig) => void
+  setNtfy: (config: NtfyConfig) => void
 }
 
 // Read defaults from environment variables
@@ -94,6 +99,11 @@ export const useSettingsStore = create<SettingsState>()(
           })),
 
         resetToDefaults: () => set(getEnvDefaults()),
+
+        // Server sync methods (full replacement)
+        setSpotify: (config) => set({ spotify: config }),
+        setYoutubeMusic: (config) => set({ youtubeMusic: config }),
+        setNtfy: (config) => set({ ntfy: config }),
       }
     },
     {

@@ -177,6 +177,11 @@ interface MusicLeagueState {
   // === Competitor Analysis (Feature 7 & 8) ===
   setCompetitorAnalysis: (data: CompetitorAnalysisData | null) => void
   clearCompetitorAnalysis: () => void
+
+  // === Server Sync (PostgreSQL persistence) ===
+  setThemesFromServer: (themes: MusicLeagueTheme[]) => void
+  setSessionsFromServer: (sessions: MusicLeagueSession[]) => void
+  setSongsILikeFromServer: (songs: SavedSong[]) => void
 }
 
 export const useMusicLeagueStore = create<MusicLeagueState>()(
@@ -1238,6 +1243,31 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
       clearCompetitorAnalysis: () => {
         set({ competitorAnalysis: null })
+      },
+
+      // === Server Sync Methods (PostgreSQL persistence) ===
+      setThemesFromServer: (themes: MusicLeagueTheme[]) => {
+        set((state) => ({
+          themes,
+          // If active theme is no longer in list, clear it
+          activeThemeId: themes.some((t) => t.id === state.activeThemeId)
+            ? state.activeThemeId
+            : themes.find((t) => t.status === 'active')?.id || null,
+        }))
+      },
+
+      setSessionsFromServer: (sessions: MusicLeagueSession[]) => {
+        set((state) => ({
+          sessions,
+          // If active session is no longer in list, clear it
+          activeSessionId: sessions.some((s) => s.id === state.activeSessionId)
+            ? state.activeSessionId
+            : null,
+        }))
+      },
+
+      setSongsILikeFromServer: (songs: SavedSong[]) => {
+        set({ songsILike: songs })
       },
     }),
     {
