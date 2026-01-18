@@ -1247,20 +1247,39 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
       // === Server Sync Methods (PostgreSQL persistence) ===
       setThemesFromServer: (themes: MusicLeagueTheme[]) => {
+        // Ensure all theme arrays are properly initialized
+        const normalizedThemes = themes.map((t) => ({
+          ...t,
+          candidates: t.candidates || [],
+          semifinalists: t.semifinalists || [],
+          finalists: t.finalists || [],
+          pick: t.pick || null,
+        }))
         set((state) => ({
-          themes,
+          themes: normalizedThemes,
           // If active theme is no longer in list, clear it
-          activeThemeId: themes.some((t) => t.id === state.activeThemeId)
+          activeThemeId: normalizedThemes.some((t) => t.id === state.activeThemeId)
             ? state.activeThemeId
-            : themes.find((t) => t.status === 'active')?.id || null,
+            : normalizedThemes.find((t) => t.status === 'active')?.id || null,
         }))
       },
 
       setSessionsFromServer: (sessions: MusicLeagueSession[]) => {
+        // Ensure all session arrays are properly initialized
+        const normalizedSessions = sessions.map((s) => ({
+          ...s,
+          conversationHistory: s.conversationHistory || [],
+          workingCandidates: s.workingCandidates || [],
+          candidates: s.candidates || [],
+          finalists: s.finalists || [],
+          rejectedSongs: s.rejectedSongs || [],
+          sessionPreferences: s.sessionPreferences || [],
+          preferenceEvidence: s.preferenceEvidence || [],
+        }))
         set((state) => ({
-          sessions,
+          sessions: normalizedSessions,
           // If active session is no longer in list, clear it
-          activeSessionId: sessions.some((s) => s.id === state.activeSessionId)
+          activeSessionId: normalizedSessions.some((s) => s.id === state.activeSessionId)
             ? state.activeSessionId
             : null,
         }))

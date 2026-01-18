@@ -294,9 +294,9 @@ app.get('/themes', async (req, res) => {
         spotifyPlaylist: row.spotify_playlist,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
-        candidates: songs.filter(s => s.tier === 'candidates').map(s => transformSong(s.song, 'candidates')),
-        semifinalists: songs.filter(s => s.tier === 'semifinalists').map(s => transformSong(s.song, 'semifinalists')),
-        finalists: songs.filter(s => s.tier === 'finalists').map(s => transformSong(s.song, 'finalists')),
+        candidates: songs.filter(s => s.tier === 'candidates' && s.song).map(s => transformSong(s.song, 'candidates')).filter(Boolean),
+        semifinalists: songs.filter(s => s.tier === 'semifinalists' && s.song).map(s => transformSong(s.song, 'semifinalists')).filter(Boolean),
+        finalists: songs.filter(s => s.tier === 'finalists' && s.song).map(s => transformSong(s.song, 'finalists')).filter(Boolean),
         pick: transformSong(songs.find(s => s.tier === 'pick')?.song, 'pick'),
       }
     })
@@ -349,9 +349,9 @@ app.get('/themes/:id', async (req, res) => {
       spotifyPlaylist: row.spotify_playlist,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      candidates: songs.filter(s => s.tier === 'candidates').map(s => transformSong(s.song, 'candidates')),
-      semifinalists: songs.filter(s => s.tier === 'semifinalists').map(s => transformSong(s.song, 'semifinalists')),
-      finalists: songs.filter(s => s.tier === 'finalists').map(s => transformSong(s.song, 'finalists')),
+      candidates: songs.filter(s => s.tier === 'candidates' && s.song).map(s => transformSong(s.song, 'candidates')).filter(Boolean),
+      semifinalists: songs.filter(s => s.tier === 'semifinalists' && s.song).map(s => transformSong(s.song, 'semifinalists')).filter(Boolean),
+      finalists: songs.filter(s => s.tier === 'finalists' && s.song).map(s => transformSong(s.song, 'finalists')).filter(Boolean),
       pick: transformSong(songs.find(s => s.tier === 'pick')?.song, 'pick'),
     }
 
