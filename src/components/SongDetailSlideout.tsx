@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Youtube,
+  Play,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -29,9 +30,11 @@ import {
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { openRouterService } from '@/services/openrouter'
+import { spotifyService } from '@/services/spotify'
 import type { Song, SongRatings } from '@/types/musicLeague'
 import { cn } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
+import { YouTubePopoutModal } from './YouTubePopoutModal'
 
 interface SongDetailSlideoutProps {
   song: Song | null
@@ -81,11 +84,14 @@ function StarRating({ value, onChange, label }: StarRatingProps): React.ReactEle
   )
 }
 
-// YouTube embed component
-function YouTubeEmbed({ videoId, searchQuery }: { videoId?: string; searchQuery: string }): React.ReactElement {
-  const [showEmbed, setShowEmbed] = useState(false)
+// YouTube button component (opens popout)
+interface YouTubeButtonProps {
+  videoId?: string
+  searchQuery: string
+  onOpenPopout: () => void
+}
 
-  // If we have a video ID, use embed. Otherwise show search link
+function YouTubeButton({ videoId, searchQuery, onOpenPopout }: YouTubeButtonProps): React.ReactElement {
   const hasVideoId = !!videoId
   const youtubeUrl = hasVideoId
     ? `https://www.youtube.com/watch?v=${videoId}`
@@ -108,27 +114,14 @@ function YouTubeEmbed({ videoId, searchQuery }: { videoId?: string; searchQuery:
 
   return (
     <div className="space-y-2">
-      {showEmbed ? (
-        <div className="aspect-video w-full rounded overflow-hidden bg-black">
-          <iframe
-            width="100%"
-            height="100%"
-            src={`https://www.youtube.com/embed/${videoId}?autoplay=0`}
-            title="YouTube video player"
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowEmbed(true)}
-          className="flex items-center gap-2 w-full rounded border p-3 hover:bg-accent/50 transition-colors"
-        >
-          <Youtube className="h-5 w-5 text-red-500" />
-          <span className="text-sm">Play on YouTube</span>
-        </button>
-      )}
+      <button
+        onClick={onOpenPopout}
+        className="flex items-center gap-2 w-full rounded border p-3 hover:bg-accent/50 transition-colors"
+      >
+        <Youtube className="h-5 w-5 text-red-500" />
+        <span className="text-sm">Play on YouTube</span>
+        <Play className="h-3 w-3 ml-auto text-muted-foreground" />
+      </button>
       <a
         href={youtubeUrl}
         target="_blank"
@@ -209,6 +202,10 @@ export function SongDetailSlideout({
   const [aiDescription, setAiDescription] = useState(song?.aiDescription || '')
   const [aiExpanded, setAiExpanded] = useState(false)
   const [notesEditable, setNotesEditable] = useState(true)
+  const [youtubePopoutOpen, setYoutubePopoutOpen] = useState(false)
+  const [enrichedSpotifyId, setEnrichedSpotifyId] = useState<string | undefined>(undefined)
+  const [enrichedYoutubeId, setEnrichedYoutubeId] = useState<string | undefined>(undefined)
+  const [isEnriching, setIsEnriching] = useState(false)
 
   // Reset state when song changes
   useEffect(() => {
@@ -219,8 +216,70 @@ export function SongDetailSlideout({
       setAiDescription(song.aiDescription || '')
       setAiExpanded(false)
       setNotesEditable(true)
+      setEnrichedSpotifyId(undefined)
+      setEnrichedYoutubeId(undefined)
+      setYoutubePopoutOpen(false)
     }
   }, [song?.id])
+
+  // Cross-platform enrichment via Songlink
+  useEffect(() => {
+    if (!song || !open) return
+
+    const hasSpotify = !!song.spotifyTrackId
+    const hasYoutube = !!song.youtubeVideoId
+
+    // If we have both, no enrichment needed
+    if (hasSpotify && hasYoutube) return
+
+    // If we have neither, we can't enrich
+    if (!hasSpotify && !hasYoutube) return
+
+    const enrichLinks = async () => {
+      setIsEnriching(true)
+      try {
+        let sourceUrl: string | undefined
+
+        if (hasSpotify && song.spotifyTrackId) {
+          sourceUrl = `https://open.spotify.com/track/${song.spotifyTrackId}`
+        } else if (hasYoutube && song.youtubeVideoId) {
+          sourceUrl = `https://www.youtube.com/watch?v=${song.youtubeVideoId}`
+        }
+
+        if (sourceUrl) {
+          const links = await spotifyService.getCrossPlatformLinks(sourceUrl)
+
+          if (!hasSpotify && links.spotify) {
+            setEnrichedSpotifyId(links.spotify.trackId)
+            // Also update the song in the store
+            if (themeId) {
+              updateSongInTheme(themeId, song.id, {
+                spotifyTrackId: links.spotify.trackId,
+                spotifyUri: links.spotify.uri,
+              })
+            }
+          }
+
+          if (!hasYoutube && links.youtube) {
+            setEnrichedYoutubeId(links.youtube.videoId)
+            // Also update the song in the store
+            if (themeId) {
+              updateSongInTheme(themeId, song.id, {
+                youtubeVideoId: links.youtube.videoId,
+                youtubeUrl: links.youtube.url,
+              })
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Songlink] Failed to enrich cross-platform links:', error)
+      } finally {
+        setIsEnriching(false)
+      }
+    }
+
+    enrichLinks()
+  }, [song?.id, song?.spotifyTrackId, song?.youtubeVideoId, open, themeId, updateSongInTheme])
 
   // Save notes on change (debounced save happens on blur)
   const handleSaveNotes = useCallback(() => {
@@ -288,11 +347,25 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
     }
   }, [song, themeId, openRouterKey, defaultModel, updateSongInTheme])
 
+  // Handle notes from YouTube popout
+  const handleYoutubeNotesSubmit = useCallback((sessionNotes: string) => {
+    if (!song || !themeId || !sessionNotes.trim()) return
+
+    const separator = notes.trim() ? '\n\n---\n**YouTube Session Notes:**\n' : '**YouTube Session Notes:**\n'
+    const newNotes = notes + separator + sessionNotes
+    setNotes(newNotes)
+    updateSongInTheme(themeId, song.id, { userNotes: newNotes })
+  }, [song, themeId, notes, updateSongInTheme])
+
   // Search query for YouTube/Spotify
   const searchQuery = useMemo(() => {
     if (!song) return ''
     return `${song.title} ${song.artist}`
   }, [song])
+
+  // Effective IDs (from song or enriched)
+  const effectiveSpotifyId = song?.spotifyTrackId || enrichedSpotifyId
+  const effectiveYoutubeId = song?.youtubeVideoId || enrichedYoutubeId
 
   if (!song) return <></>
 
@@ -458,22 +531,44 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
 
             {/* Listen Section */}
             <div className="space-y-3">
-              <span className="text-xs font-medium text-muted-foreground">Listen</span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Listen</span>
+                {isEnriching && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Finding links...
+                  </span>
+                )}
+              </div>
 
               {/* Spotify Player */}
               <SpotifyEmbed
-                trackId={song.spotifyTrackId}
+                trackId={effectiveSpotifyId}
                 searchQuery={searchQuery}
               />
 
               {/* YouTube Player */}
-              <YouTubeEmbed
-                videoId={song.youtubeVideoId}
+              <YouTubeButton
+                videoId={effectiveYoutubeId}
                 searchQuery={searchQuery}
+                onOpenPopout={() => setYoutubePopoutOpen(true)}
               />
             </div>
           </div>
         </ScrollArea>
+
+        {/* YouTube Popout Modal */}
+        {effectiveYoutubeId && (
+          <YouTubePopoutModal
+            videoId={effectiveYoutubeId}
+            songTitle={song.title}
+            songArtist={song.artist}
+            open={youtubePopoutOpen}
+            onOpenChange={setYoutubePopoutOpen}
+            onNotesSubmit={handleYoutubeNotesSubmit}
+            existingNotes={notes}
+          />
+        )}
       </SheetContent>
     </Sheet>
   )

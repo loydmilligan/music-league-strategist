@@ -42,6 +42,18 @@ interface EnrichedSongLinks {
   youtubeUrl?: string
 }
 
+interface CrossPlatformLinks {
+  spotify?: {
+    trackId: string
+    uri: string
+    url: string
+  }
+  youtube?: {
+    videoId: string
+    url: string
+  }
+}
+
 interface SpotifyAccessToken {
   access_token: string
   expires_in: number
@@ -175,9 +187,9 @@ class SpotifyService {
   }
 
   // Use Songlink/Odesli API to get links for other platforms (YouTube, Apple Music, etc.)
-  async getSonglinkData(spotifyUrl: string): Promise<SonglinkResponse | null> {
+  async getSonglinkData(musicUrl: string): Promise<SonglinkResponse | null> {
     try {
-      const encodedUrl = encodeURIComponent(spotifyUrl)
+      const encodedUrl = encodeURIComponent(musicUrl)
       const response = await fetch(
         `https://api.song.link/v1-alpha.1/links?url=${encodedUrl}`,
         {
@@ -197,6 +209,71 @@ class SpotifyService {
       console.error('[Songlink] Error fetching links:', error)
       return null
     }
+  }
+
+  // Get cross-platform links from any music URL (Spotify or YouTube)
+  async getCrossPlatformLinks(musicUrl: string): Promise<CrossPlatformLinks> {
+    const result: CrossPlatformLinks = {}
+
+    try {
+      const songlinkData = await this.getSonglinkData(musicUrl)
+
+      if (songlinkData?.linksByPlatform) {
+        // Extract Spotify links
+        const spotify = songlinkData.linksByPlatform.spotify
+        if (spotify?.url) {
+          const spotifyTrackId = this.extractSpotifyTrackId(spotify.url)
+          if (spotifyTrackId) {
+            result.spotify = {
+              trackId: spotifyTrackId,
+              uri: `spotify:track:${spotifyTrackId}`,
+              url: spotify.url,
+            }
+          }
+        }
+
+        // Extract YouTube links (prefer YouTube Music, fall back to regular YouTube)
+        const ytMusic = songlinkData.linksByPlatform.youtubeMusic
+        const yt = songlinkData.linksByPlatform.youtube
+
+        if (ytMusic?.url) {
+          const videoId = this.extractYouTubeVideoId(ytMusic.url)
+          if (videoId) {
+            result.youtube = {
+              videoId,
+              url: ytMusic.url,
+            }
+          }
+        } else if (yt?.url) {
+          const videoId = this.extractYouTubeVideoId(yt.url)
+          if (videoId) {
+            result.youtube = {
+              videoId,
+              url: yt.url,
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Songlink] Error getting cross-platform links:', error)
+    }
+
+    return result
+  }
+
+  // Extract Spotify track ID from a Spotify URL
+  private extractSpotifyTrackId(url: string): string | undefined {
+    const patterns = [
+      /spotify\.com\/track\/([a-zA-Z0-9]+)/,
+      /spotify:track:([a-zA-Z0-9]+)/,
+    ]
+
+    for (const pattern of patterns) {
+      const match = url.match(pattern)
+      if (match) return match[1]
+    }
+
+    return undefined
   }
 
   // Extract YouTube video ID from a YouTube URL
