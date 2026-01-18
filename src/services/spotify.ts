@@ -187,11 +187,13 @@ class SpotifyService {
   }
 
   // Use Songlink/Odesli API to get links for other platforms (YouTube, Apple Music, etc.)
+  // Uses nginx proxy to avoid CORS issues
   async getSonglinkData(musicUrl: string): Promise<SonglinkResponse | null> {
     try {
       const encodedUrl = encodeURIComponent(musicUrl)
+      // Use proxy endpoint to avoid CORS issues (nginx proxies to api.song.link)
       const response = await fetch(
-        `https://api.song.link/v1-alpha.1/links?url=${encodedUrl}`,
+        `/api/songlink/v1-alpha.1/links?url=${encodedUrl}`,
         {
           headers: {
             'Accept': 'application/json',
