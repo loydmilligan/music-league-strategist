@@ -20,7 +20,9 @@ import {
 } from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { useSettingsStore, AI_MODELS } from '@/stores/settingsStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useModelsStore } from '@/stores/modelsStore'
+import { ModelsManager } from '@/components/ModelsManager'
 
 interface SettingsModalProps {
   trigger?: React.ReactNode
@@ -43,6 +45,9 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
     setSpotifyConfig,
     setYouTubeMusicConfig,
   } = useSettingsStore()
+
+  // Models store
+  const models = useModelsStore((s) => s.models)
 
   // Local state for form
   const [localOpenRouterKey, setLocalOpenRouterKey] = useState(openRouterKey)
@@ -159,15 +164,20 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
                     <SelectValue placeholder="Select a model" />
                   </SelectTrigger>
                   <SelectContent>
-                    {AI_MODELS.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        {model.name}
+                    {models.map((model) => (
+                      <SelectItem key={model.id} value={model.model_id}>
+                        {model.nickname}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            <Separator />
+
+            {/* Models Manager Section */}
+            <ModelsManager />
 
             <Separator />
 

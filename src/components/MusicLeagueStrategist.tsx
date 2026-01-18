@@ -24,7 +24,9 @@ import {
   getFinalistsPrompt,
   getLongTermPreferencePrompt,
 } from '@/stores/musicLeagueStore'
-import { useSettingsStore, AI_MODELS } from '@/stores/settingsStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useModelsStore } from '@/stores/modelsStore'
+import type { AIModel } from '@/types/models'
 import { openRouterService } from '@/services/openrouter'
 import { youtubeMusicService } from '@/services/youtubeMusic'
 import { spotifyService } from '@/services/spotify'
@@ -121,10 +123,13 @@ export function MusicLeagueStrategist(): React.ReactElement {
     return 'anthropic/claude-sonnet-4'
   }, [strategistModel, defaultModel])
 
+  // Get models from store
+  const models = useModelsStore((s) => s.models)
+  const getModelNickname = useModelsStore((s) => s.getNickname)
+
   // Get model nickname
   const getNickname = (modelId: string): string => {
-    const entry = AI_MODELS.find((m) => m.id === modelId)
-    return entry?.name || modelId.split('/').pop() || modelId
+    return getModelNickname(modelId)
   }
 
   // Auto-scroll to bottom of messages
@@ -492,7 +497,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
     }
   }
 
-  // Model options from AI_MODELS constant
+  // Model options from models store
   const modelValue = strategistModel ?? defaultModel ?? '__default__'
   const defaultModelLabel = defaultModel ? `Default (${getNickname(defaultModel)})` : 'Default'
 
@@ -538,9 +543,9 @@ export function MusicLeagueStrategist(): React.ReactElement {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__default__">{defaultModelLabel}</SelectItem>
-              {AI_MODELS.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
-                  {model.name}
+              {models.map((model: AIModel) => (
+                <SelectItem key={model.id} value={model.model_id}>
+                  {model.nickname}
                 </SelectItem>
               ))}
             </SelectContent>

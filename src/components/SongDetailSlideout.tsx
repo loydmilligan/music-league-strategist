@@ -11,8 +11,12 @@ import {
   ChevronUp,
   Youtube,
   Play,
+  RefreshCw,
+  Pencil,
+  X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -207,6 +211,12 @@ export function SongDetailSlideout({
   const [enrichedYoutubeId, setEnrichedYoutubeId] = useState<string | undefined>(undefined)
   const [isEnriching, setIsEnriching] = useState(false)
 
+  // Retrigger search state
+  const [isEditingSearch, setIsEditingSearch] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const [editArtist, setEditArtist] = useState('')
+  const [isRetriggering, setIsRetriggering] = useState(false)
+
   // Reset state when song changes
   useEffect(() => {
     if (song) {
@@ -219,6 +229,11 @@ export function SongDetailSlideout({
       setEnrichedSpotifyId(undefined)
       setEnrichedYoutubeId(undefined)
       setYoutubePopoutOpen(false)
+      // Reset retrigger edit state
+      setIsEditingSearch(false)
+      setEditTitle(song.title)
+      setEditArtist(song.artist)
+      setIsRetriggering(false)
     }
   }, [song?.id])
 
@@ -356,6 +371,62 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
     setNotes(newNotes)
     updateSongInTheme(themeId, song.id, { userNotes: newNotes })
   }, [song, themeId, notes, updateSongInTheme])
+
+  // Retrigger search for Spotify/YouTube
+  const handleRetriggerSearch = useCallback(async () => {
+    if (!song || !themeId || !editTitle.trim() || !editArtist.trim()) return
+
+    setIsRetriggering(true)
+    try {
+      // Create a temporary song object with the edited values
+      const tempSong = {
+        ...song,
+        title: editTitle.trim(),
+        artist: editArtist.trim(),
+      }
+
+      // Search for the song
+      const links = await spotifyService.getEnrichedLinks(tempSong)
+
+      if (links.spotifyTrackId || links.youtubeVideoId) {
+        // Update the song in the store with the new IDs
+        updateSongInTheme(themeId, song.id, {
+          spotifyTrackId: links.spotifyTrackId,
+          spotifyUri: links.spotifyUri,
+          youtubeVideoId: links.youtubeVideoId,
+          youtubeUrl: links.youtubeUrl,
+          // Also update the title/artist if changed
+          title: editTitle.trim(),
+          artist: editArtist.trim(),
+        })
+
+        // Update local enriched state
+        if (links.spotifyTrackId) {
+          setEnrichedSpotifyId(links.spotifyTrackId)
+        }
+        if (links.youtubeVideoId) {
+          setEnrichedYoutubeId(links.youtubeVideoId)
+        }
+
+        setIsEditingSearch(false)
+      } else {
+        console.warn('[Retrigger] No matches found for:', editTitle, editArtist)
+      }
+    } catch (error) {
+      console.error('[Retrigger] Failed to search:', error)
+    } finally {
+      setIsRetriggering(false)
+    }
+  }, [song, themeId, editTitle, editArtist, updateSongInTheme])
+
+  // Cancel editing and reset to original values
+  const handleCancelEdit = useCallback(() => {
+    if (song) {
+      setEditTitle(song.title)
+      setEditArtist(song.artist)
+    }
+    setIsEditingSearch(false)
+  }, [song])
 
   // Search query for YouTube/Spotify
   const searchQuery = useMemo(() => {
@@ -533,13 +604,87 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium text-muted-foreground">Listen</span>
-                {isEnriching && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Finding links...
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {isEnriching && (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Finding links...
+                    </span>
+                  )}
+                  {!isEditingSearch && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs gap-1"
+                      onClick={() => {
+                        setEditTitle(song.title)
+                        setEditArtist(song.artist)
+                        setIsEditingSearch(true)
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit & Search
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {/* Edit & Retrigger Search Panel */}
+              {isEditingSearch && (
+                <div className="p-3 rounded-lg border bg-muted/30 space-y-3">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Song Title</label>
+                    <Input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Song title..."
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Artist</label>
+                    <Input
+                      value={editArtist}
+                      onChange={(e) => setEditArtist(e.target.value)}
+                      placeholder="Artist name..."
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 gap-1"
+                      onClick={handleRetriggerSearch}
+                      disabled={isRetriggering || !editTitle.trim() || !editArtist.trim()}
+                    >
+                      {isRetriggering ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Searching...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3 w-3" />
+                          Search Again
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1"
+                      onClick={handleCancelEdit}
+                      disabled={isRetriggering}
+                    >
+                      <X className="h-3 w-3" />
+                      Cancel
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Edit the title/artist and click "Search Again" to find matching tracks on Spotify & YouTube.
+                  </p>
+                </div>
+              )}
 
               {/* Spotify Player */}
               <SpotifyEmbed
