@@ -224,7 +224,19 @@ export function MusicLeagueStrategist(): React.ReactElement {
     let currentThemeId = activeThemeId
     if (!currentTheme) {
       currentThemeId = createTheme(userMessage)
-      currentTheme = themes.find((t) => t.id === currentThemeId)
+      // Create a local theme object since store state hasn't updated yet
+      currentTheme = {
+        id: currentThemeId,
+        rawTheme: userMessage,
+        title: userMessage.slice(0, 50),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        pick: null,
+        finalists: [],
+        semifinalists: [],
+        candidates: [],
+        status: 'active' as const,
+      }
 
       // Also update the session's legacy theme field
       setTheme({ rawTheme: userMessage })
