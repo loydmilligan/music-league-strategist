@@ -1,0 +1,371 @@
+// CompetitorAnalysisPanel Component (Feature 7)
+// Displays competitor analysis from imported CSV data
+
+import { useState } from 'react'
+import {
+  Trophy,
+  Medal,
+  User,
+  Music,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs'
+import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
+import { CSVImportModal } from './CSVImportModal'
+import type { CompetitorProfile, RoundResults } from '@/types/musicLeague'
+import { cn } from '@/lib/utils'
+
+interface CompetitorAnalysisPanelProps {
+  trigger?: React.ReactNode
+  className?: string
+}
+
+function CompetitorCard({
+  competitor,
+  rank,
+}: {
+  competitor: CompetitorProfile
+  rank: number
+}): React.ReactElement {
+  const [isOpen, setIsOpen] = useState(false)
+
+  const getRankIcon = () => {
+    if (rank === 1) return <Trophy className="h-4 w-4 text-amber-500" />
+    if (rank === 2) return <Medal className="h-4 w-4 text-gray-400" />
+    if (rank === 3) return <Medal className="h-4 w-4 text-amber-600" />
+    return <span className="text-xs text-muted-foreground">#{rank}</span>
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 cursor-pointer transition-colors">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center">
+              {getRankIcon()}
+            </div>
+            <div>
+              <p className="font-medium text-sm">{competitor.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {competitor.submissions.length} rounds
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="font-medium text-sm">{competitor.totalPoints} pts</p>
+              <p className="text-xs text-muted-foreground">
+                avg {competitor.averagePoints.toFixed(1)}
+              </p>
+            </div>
+            <div className="flex items-center gap-1">
+              {competitor.wins > 0 && (
+                <Badge variant="default" className="bg-amber-500 text-xs">
+                  {competitor.wins} {competitor.wins === 1 ? 'win' : 'wins'}
+                </Badge>
+              )}
+              {isOpen ? (
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              )}
+            </div>
+          </div>
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pl-11 pr-3 pb-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Submissions</p>
+          {competitor.submissions
+            .sort((a, b) => b.pointsReceived - a.pointsReceived)
+            .slice(0, 5)
+            .map((submission, idx) => (
+              <div
+                key={`${submission.roundId}-${idx}`}
+                className="flex items-center justify-between text-xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">
+                    "{submission.title}" - {submission.artist}
+                  </p>
+                  <p className="text-muted-foreground truncate">
+                    {submission.roundName}
+                  </p>
+                </div>
+                <Badge
+                  variant={submission.rank === 1 ? 'default' : 'secondary'}
+                  className={cn(
+                    'text-[10px] ml-2',
+                    submission.rank === 1 && 'bg-amber-500'
+                  )}
+                >
+                  #{submission.rank} ({submission.pointsReceived}pts)
+                </Badge>
+              </div>
+            ))}
+          {competitor.submissions.length > 5 && (
+            <p className="text-xs text-muted-foreground">
+              + {competitor.submissions.length - 5} more
+            </p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function RoundCard({ round }: { round: RoundResults }): React.ReactElement {
+  const [isOpen, setIsOpen] = useState(false)
+  const top3 = round.rankings.filter(r => r.rank <= 3)
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 cursor-pointer transition-colors">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-sm truncate">{round.roundName}</p>
+            <p className="text-xs text-muted-foreground">
+              {round.rankings.length} submissions
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {top3.length > 0 && (
+              <div className="flex -space-x-1">
+                {top3.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      'h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white',
+                      idx === 0 && 'bg-amber-500',
+                      idx === 1 && 'bg-gray-400',
+                      idx === 2 && 'bg-amber-600'
+                    )}
+                  >
+                    {idx + 1}
+                  </div>
+                ))}
+              </div>
+            )}
+            {isOpen ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </div>
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-3 pb-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Rankings</p>
+          {round.rankings.slice(0, 10).map((ranking, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between text-xs"
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span
+                  className={cn(
+                    'w-5 text-center font-medium',
+                    ranking.rank === 1 && 'text-amber-500',
+                    ranking.rank === 2 && 'text-gray-400',
+                    ranking.rank === 3 && 'text-amber-600'
+                  )}
+                >
+                  #{ranking.rank}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate">
+                    "{ranking.title}" - {ranking.artist}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {ranking.submitterName}
+                  </p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-[10px] ml-2">
+                {ranking.totalPoints}pts
+              </Badge>
+            </div>
+          ))}
+          {round.rankings.length > 10 && (
+            <p className="text-xs text-muted-foreground">
+              + {round.rankings.length - 10} more
+            </p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+export function CompetitorAnalysisPanel({
+  trigger,
+  className,
+}: CompetitorAnalysisPanelProps): React.ReactElement {
+  const [open, setOpen] = useState(false)
+
+  const { competitorAnalysis, clearCompetitorAnalysis } = useMusicLeagueStore()
+
+  const hasData = competitorAnalysis !== null
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        {trigger || (
+          <Button variant="outline" size="sm" className={cn('gap-2', className)}>
+            <BarChart3 className="h-4 w-4" />
+            Competitors
+            {hasData && (
+              <Badge variant="secondary" className="ml-1">
+                {competitorAnalysis.competitors.length}
+              </Badge>
+            )}
+          </Button>
+        )}
+      </SheetTrigger>
+      <SheetContent side="right" className="w-full sm:max-w-lg p-0 flex flex-col">
+        <SheetHeader className="px-4 py-3 border-b">
+          <SheetTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Competitor Analysis
+            </div>
+            {hasData && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  if (confirm('Clear all imported data?')) {
+                    clearCompetitorAnalysis()
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            )}
+          </SheetTitle>
+        </SheetHeader>
+
+        {!hasData ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <BarChart3 className="h-12 w-12 text-muted-foreground opacity-50 mb-4" />
+            <h3 className="font-medium mb-2">No Data Imported</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Import your Music League CSV exports to analyze competitor performance.
+            </p>
+            <CSVImportModal />
+          </div>
+        ) : (
+          <>
+            {/* Summary Header */}
+            <div className="px-4 py-3 border-b bg-muted/30">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {competitorAnalysis.leagueName || 'Music League'}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Imported {new Date(competitorAnalysis.importedAt).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="flex items-center gap-4 mt-2 text-xs">
+                <div className="flex items-center gap-1">
+                  <User className="h-3 w-3" />
+                  {competitorAnalysis.competitors.length} competitors
+                </div>
+                <div className="flex items-center gap-1">
+                  <Music className="h-3 w-3" />
+                  {competitorAnalysis.rounds.length} rounds
+                </div>
+              </div>
+            </div>
+
+            <Tabs defaultValue="leaderboard" className="flex-1 flex flex-col">
+              <TabsList className="mx-4 mt-2">
+                <TabsTrigger value="leaderboard" className="text-xs">
+                  <Trophy className="h-3 w-3 mr-1" />
+                  Leaderboard
+                </TabsTrigger>
+                <TabsTrigger value="rounds" className="text-xs">
+                  <Music className="h-3 w-3 mr-1" />
+                  Rounds
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="leaderboard" className="flex-1 m-0">
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-2">
+                    {competitorAnalysis.competitors.map((competitor, idx) => (
+                      <CompetitorCard
+                        key={competitor.id}
+                        competitor={competitor}
+                        rank={idx + 1}
+                      />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="rounds" className="flex-1 m-0">
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-2">
+                    {competitorAnalysis.roundResults.map((round) => (
+                      <RoundCard key={round.roundId} round={round} />
+                    ))}
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+// Compact trigger button for header
+export function CompetitorAnalysisButton({
+  className,
+}: {
+  className?: string
+}): React.ReactElement {
+  const competitorAnalysis = useMusicLeagueStore((s) => s.competitorAnalysis)
+  const hasData = competitorAnalysis !== null
+
+  return (
+    <CompetitorAnalysisPanel
+      className={className}
+      trigger={
+        <Button variant="ghost" size="icon" className={cn('h-8 w-8 relative', className)}>
+          <BarChart3 className="h-4 w-4" />
+          {hasData && (
+            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary" />
+          )}
+        </Button>
+      }
+    />
+  )
+}

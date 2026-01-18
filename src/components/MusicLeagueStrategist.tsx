@@ -150,26 +150,56 @@ export function MusicLeagueStrategist(): React.ReactElement {
     }
   }, [activeThemeId, activeSessionId, sessions, createSession, resumeSession])
 
-  // Handle tier actions from AI
-  const handleTierActions = useCallback((actions: TierAction[]): void => {
+  // Handle tier actions from AI (Feature 1: add_to_candidates support)
+  const handleTierActions = useCallback(async (actions: TierAction[]): Promise<void> => {
     if (!theme) return
 
     for (const action of actions) {
-      // Find the song in working candidates
-      const song = candidates.find(
-        (s) =>
-          s.title.toLowerCase() === action.songTitle.toLowerCase() &&
-          s.artist.toLowerCase() === action.songArtist.toLowerCase()
-      )
+      // Handle add_to_candidates action (Feature 1)
+      if (action.action === 'add_to_candidates' && 'song' in action) {
+        const songData = action.song
+        let newSong: Song = {
+          id: `song-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          title: songData.title,
+          artist: songData.artist,
+          album: songData.album,
+          year: songData.year,
+          genre: songData.genre,
+          reason: songData.reason || action.reason || 'Added via command',
+        }
 
-      if (!song) continue
+        // Try to enrich with Spotify/YouTube links
+        try {
+          const enriched = await spotifyService.enrichSongsWithTrackIds([newSong])
+          if (enriched.length > 0) {
+            newSong = enriched[0]
+          }
+        } catch (err) {
+          console.warn('Failed to enrich song:', err)
+        }
 
-      if (action.action === 'promote' && 'toTier' in action) {
-        // First add to theme candidates if not already there
-        addCandidateToTheme(theme.id, song)
-        // Then promote if needed
-        if (action.toTier !== 'candidates') {
-          promoteSong(theme.id, { ...song, currentTier: 'candidates' }, action.toTier, action.reason)
+        addCandidateToTheme(theme.id, newSong)
+        continue
+      }
+
+      // Handle promote/demote/remove actions
+      if ('songTitle' in action && 'songArtist' in action) {
+        // Find the song in working candidates
+        const song = candidates.find(
+          (s) =>
+            s.title.toLowerCase() === action.songTitle.toLowerCase() &&
+            s.artist.toLowerCase() === action.songArtist.toLowerCase()
+        )
+
+        if (!song) continue
+
+        if (action.action === 'promote' && 'toTier' in action) {
+          // First add to theme candidates if not already there
+          addCandidateToTheme(theme.id, song)
+          // Then promote if needed
+          if (action.toTier !== 'candidates') {
+            promoteSong(theme.id, { ...song, currentTier: 'candidates' }, action.toTier, action.reason)
+          }
         }
       }
     }
@@ -293,7 +323,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
 
         // Handle tier actions from AI
         if (parsed.tierActions && parsed.tierActions.length > 0) {
-          handleTierActions(parsed.tierActions)
+          await handleTierActions(parsed.tierActions)
         }
 
         // Handle actions

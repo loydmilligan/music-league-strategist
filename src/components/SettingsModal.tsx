@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Eye, EyeOff, ExternalLink, Check, AlertCircle } from 'lucide-react'
+import { Settings, Eye, EyeOff, ExternalLink, Check, AlertCircle, Send } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,6 +23,8 @@ import { Separator } from '@/components/ui/separator'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useModelsStore } from '@/stores/modelsStore'
 import { ModelsManager } from '@/components/ModelsManager'
+import { Switch } from '@/components/ui/switch'
+import { ntfyService } from '@/services/ntfy'
 
 interface SettingsModalProps {
   trigger?: React.ReactNode
@@ -40,10 +42,12 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
     defaultModel,
     spotify,
     youtubeMusic,
+    ntfy,
     setOpenRouterKey,
     setDefaultModel,
     setSpotifyConfig,
     setYouTubeMusicConfig,
+    setNtfyConfig,
   } = useSettingsStore()
 
   // Models store
@@ -54,6 +58,8 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
   const [localDefaultModel, setLocalDefaultModel] = useState(defaultModel)
   const [localSpotify, setLocalSpotify] = useState(spotify)
   const [localYouTube, setLocalYouTube] = useState(youtubeMusic)
+  const [localNtfy, setLocalNtfy] = useState(ntfy)
+  const [testingSendNotification, setTestingSendNotification] = useState(false)
 
   // Sync local state with store when modal opens
   useEffect(() => {
@@ -62,15 +68,28 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
       setLocalDefaultModel(defaultModel)
       setLocalSpotify(spotify)
       setLocalYouTube(youtubeMusic)
+      setLocalNtfy(ntfy)
     }
-  }, [open, openRouterKey, defaultModel, spotify, youtubeMusic])
+  }, [open, openRouterKey, defaultModel, spotify, youtubeMusic, ntfy])
 
   const handleSave = (): void => {
     setOpenRouterKey(localOpenRouterKey)
     setDefaultModel(localDefaultModel)
     setSpotifyConfig(localSpotify)
     setYouTubeMusicConfig(localYouTube)
+    setNtfyConfig(localNtfy)
     setOpen(false)
+  }
+
+  const handleTestNotification = async (): Promise<void> => {
+    // Save first so the service has the config
+    setNtfyConfig(localNtfy)
+    setTestingSendNotification(true)
+    try {
+      await ntfyService.sendTestNotification()
+    } finally {
+      setTestingSendNotification(false)
+    }
   }
 
   const hasOpenRouterKey = !!localOpenRouterKey
@@ -353,6 +372,106 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
                   className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
                   YouTube API Setup Guide <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* ntfy Section (Feature 5) */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Push Notifications (Optional)</h3>
+                {localNtfy.enabled && localNtfy.topic ? (
+                  <span className="flex items-center gap-1 text-xs text-green-600">
+                    <Check className="h-3 w-3" />
+                    Configured
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    ntfy.sh integration
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="ntfy-enabled" className="text-xs">
+                      Enable Notifications
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Get deadline reminders on your phone
+                    </p>
+                  </div>
+                  <Switch
+                    id="ntfy-enabled"
+                    checked={localNtfy.enabled}
+                    onCheckedChange={(checked) =>
+                      setLocalNtfy({ ...localNtfy, enabled: checked })
+                    }
+                  />
+                </div>
+
+                {localNtfy.enabled && (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="ntfy-topic" className="text-xs">
+                        Topic Name
+                      </Label>
+                      <Input
+                        id="ntfy-topic"
+                        value={localNtfy.topic}
+                        onChange={(e) =>
+                          setLocalNtfy({ ...localNtfy, topic: e.target.value })
+                        }
+                        placeholder="e.g., my-music-league-alerts"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Use a unique, hard-to-guess topic name for privacy
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="ntfy-server" className="text-xs">
+                        Server URL (optional)
+                      </Label>
+                      <Input
+                        id="ntfy-server"
+                        value={localNtfy.serverUrl}
+                        onChange={(e) =>
+                          setLocalNtfy({ ...localNtfy, serverUrl: e.target.value })
+                        }
+                        placeholder="https://ntfy.sh"
+                      />
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={handleTestNotification}
+                      disabled={!localNtfy.topic || testingSendNotification}
+                    >
+                      {testingSendNotification ? (
+                        <>Sending...</>
+                      ) : (
+                        <>
+                          <Send className="h-3 w-3" />
+                          Send Test Notification
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
+
+                <a
+                  href="https://ntfy.sh"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Learn about ntfy.sh <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             </div>

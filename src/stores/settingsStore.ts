@@ -13,6 +13,13 @@ interface YouTubeMusicConfig {
   refreshToken: string
 }
 
+// Feature 5: ntfy configuration
+interface NtfyConfig {
+  enabled: boolean
+  topic: string
+  serverUrl: string  // Default: https://ntfy.sh
+}
+
 interface SettingsState {
   // OpenRouter
   openRouterKey: string
@@ -24,11 +31,15 @@ interface SettingsState {
   // YouTube Music OAuth
   youtubeMusic: YouTubeMusicConfig
 
+  // ntfy Push Notifications (Feature 5)
+  ntfy: NtfyConfig
+
   // Actions
   setOpenRouterKey: (key: string) => void
   setDefaultModel: (model: string) => void
   setSpotifyConfig: (config: Partial<SpotifyConfig>) => void
   setYouTubeMusicConfig: (config: Partial<YouTubeMusicConfig>) => void
+  setNtfyConfig: (config: Partial<NtfyConfig>) => void
   resetToDefaults: () => void
 }
 
@@ -45,6 +56,11 @@ const getEnvDefaults = () => ({
     clientId: import.meta.env.VITE_YOUTUBE_CLIENT_ID || '',
     clientSecret: import.meta.env.VITE_YOUTUBE_CLIENT_SECRET || '',
     refreshToken: import.meta.env.VITE_YOUTUBE_REFRESH_TOKEN || '',
+  },
+  ntfy: {
+    enabled: false,
+    topic: import.meta.env.VITE_NTFY_TOPIC || '',
+    serverUrl: import.meta.env.VITE_NTFY_SERVER || 'https://ntfy.sh',
   },
 })
 
@@ -72,6 +88,11 @@ export const useSettingsStore = create<SettingsState>()(
             youtubeMusic: { ...state.youtubeMusic, ...config },
           })),
 
+        setNtfyConfig: (config) =>
+          set((state) => ({
+            ntfy: { ...state.ntfy, ...config },
+          })),
+
         resetToDefaults: () => set(getEnvDefaults()),
       }
     },
@@ -97,6 +118,11 @@ export const useSettingsStore = create<SettingsState>()(
             clientSecret: persisted?.youtubeMusic?.clientSecret || envDefaults.youtubeMusic.clientSecret,
             refreshToken: persisted?.youtubeMusic?.refreshToken || envDefaults.youtubeMusic.refreshToken,
           },
+          ntfy: {
+            enabled: persisted?.ntfy?.enabled ?? envDefaults.ntfy.enabled,
+            topic: persisted?.ntfy?.topic || envDefaults.ntfy.topic,
+            serverUrl: persisted?.ntfy?.serverUrl || envDefaults.ntfy.serverUrl,
+          },
         }
       },
     }
@@ -118,4 +144,10 @@ export const isSpotifyConfigured = (): boolean => {
 export const isYouTubeMusicConfigured = (): boolean => {
   const { clientId, clientSecret, refreshToken } = useSettingsStore.getState().youtubeMusic
   return Boolean(clientId && clientSecret && refreshToken)
+}
+
+// Helper to check if ntfy is configured
+export const isNtfyConfigured = (): boolean => {
+  const { enabled, topic } = useSettingsStore.getState().ntfy
+  return enabled && Boolean(topic)
 }

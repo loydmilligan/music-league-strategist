@@ -12,7 +12,18 @@ export type MusicLeaguePhase =
   | 'conversation'   // Maps to 'brainstorm'
   | 'finalists'      // Maps to 'decide'
 
+// Theme Phase for phase progression system (Feature 3)
+export type ThemePhase = 'idle' | 'brainstorm' | 'refine' | 'decide' | 'complete'
+
 export type FunnelTier = 'candidates' | 'semifinalists' | 'finalists' | 'pick'
+
+// Phase thresholds for auto-advancement
+export const PHASE_THRESHOLDS = {
+  brainstorm: { candidates: 0 },     // Start: theme created
+  refine: { candidates: 8 },         // 8+ candidates → refine
+  decide: { semifinalists: 4 },      // 4+ semifinalists → decide
+  complete: { pick: 1 },             // 1 pick → complete
+} as const
 
 export const FUNNEL_TIER_LIMITS: Record<FunnelTier, number> = {
   candidates: 30,
@@ -96,6 +107,12 @@ export interface ThemeContext {
 
 export type ThemeStatus = 'active' | 'submitted' | 'archived'
 
+// Hall passes for late additions (Feature 4)
+export interface HallPassesUsed {
+  semifinals: boolean
+  finals: boolean
+}
+
 export interface MusicLeagueTheme {
   id: string
   rawTheme: string                    // Original Music League prompt
@@ -121,7 +138,9 @@ export interface MusicLeagueTheme {
   }
 
   status: ThemeStatus
-  deadline?: number                   // Optional submission deadline
+  deadline?: number                   // Optional submission deadline (Feature 2)
+  phase?: ThemePhase                  // Current phase in progression (Feature 3)
+  hallPassesUsed?: HallPassesUsed     // Track hall pass usage (Feature 4)
 }
 
 export interface PreferenceEvidence {
@@ -189,11 +208,12 @@ export interface MusicLeagueSession {
   finalPick?: Song                    // The song they ultimately chose
 }
 
-// AI tier action types
+// AI tier action types (Feature 1: add_to_candidates)
 export type TierAction =
   | { action: 'promote'; songTitle: string; songArtist: string; toTier: FunnelTier; reason?: string }
   | { action: 'demote'; songTitle: string; songArtist: string; toTier: FunnelTier; reason?: string }
   | { action: 'remove'; songTitle: string; songArtist: string; reason?: string }
+  | { action: 'add_to_candidates'; song: { title: string; artist: string; album?: string; year?: number; genre?: string; reason: string }; reason?: string }
 
 // AI Response structure for conversational mode
 export interface AIConversationResponse {
@@ -480,4 +500,75 @@ export interface PlaylistExportConfig {
   name: string
   description: string
   songs: Song[]
+}
+
+// === Feature 6: Songs I Like Collection ===
+
+export interface SavedSong extends Song {
+  savedAt: number
+  tags?: string[]                    // User-defined tags (moods, potential themes)
+  notes?: string                     // Why they saved it
+  sourceThemeId?: string             // Which theme it came from (if any)
+}
+
+export interface SongsILikeCollection {
+  songs: SavedSong[]
+  lastUpdated: number
+}
+
+// === Feature 7 & 8: Competitor Analysis ===
+
+export interface RoundInfo {
+  id: string
+  name: string
+  description?: string
+  playlistUrl?: string
+  createdAt: string
+}
+
+export interface CompetitorSubmission {
+  spotifyUri: string
+  title: string
+  album?: string
+  artist: string
+  submitterId: string
+  submitterName: string
+  roundId: string
+  roundName: string
+  pointsReceived: number
+  rank: number
+  comment?: string
+}
+
+export interface CompetitorProfile {
+  id: string
+  name: string
+  submissions: CompetitorSubmission[]
+  totalPoints: number
+  averagePoints: number
+  wins: number                       // Number of 1st place finishes
+  topThrees: number                  // Number of top 3 finishes
+}
+
+export interface RoundResults {
+  roundId: string
+  roundName: string
+  rankings: Array<{
+    rank: number
+    spotifyUri: string
+    title: string
+    artist: string
+    submitterId: string
+    submitterName: string
+    totalPoints: number
+    comment?: string
+  }>
+}
+
+export interface CompetitorAnalysisData {
+  rounds: RoundInfo[]
+  competitors: CompetitorProfile[]
+  roundResults: RoundResults[]
+  importedAt: number
+  leagueName?: string
 }

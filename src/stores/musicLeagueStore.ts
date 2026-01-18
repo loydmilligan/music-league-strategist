@@ -15,8 +15,12 @@ import type {
   LongTermPreference,
   FunnelTier,
   ThemeStatus,
+  ThemePhase,
+  SavedSong,
+  CompetitorAnalysisData,
+  HallPassesUsed,
 } from '@/types/musicLeague'
-import { MUSIC_LEAGUE_PROMPTS, FUNNEL_TIER_LIMITS } from '@/types/musicLeague'
+import { MUSIC_LEAGUE_PROMPTS, FUNNEL_TIER_LIMITS, PHASE_THRESHOLDS } from '@/types/musicLeague'
 
 function generateId(): string {
   return `ml-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
@@ -54,6 +58,12 @@ interface MusicLeagueState {
 
   // User profile
   userProfile: MusicLeagueUserProfile | null
+
+  // Songs I Like Collection (Feature 6)
+  songsILike: SavedSong[]
+
+  // Competitor Analysis Data (Feature 7 & 8)
+  competitorAnalysis: CompetitorAnalysisData | null
 
   // Migration version
   _version: number
@@ -148,6 +158,24 @@ interface MusicLeagueState {
 
   // === Export ===
   exportFunnelSummary: (themeId: string) => string
+
+  // === Phase Progression (Feature 3) ===
+  computeThemePhase: (theme: MusicLeagueTheme) => ThemePhase
+  updateThemePhase: (themeId: string) => void
+
+  // === Hall Pass System (Feature 4) ===
+  useHallPass: (themeId: string, tier: 'semifinals' | 'finals', song: Song) => boolean
+  getHallPassesAvailable: (themeId: string) => HallPassesUsed
+
+  // === Songs I Like Collection (Feature 6) ===
+  addToSongsILike: (song: Song, tags?: string[], notes?: string, sourceThemeId?: string) => void
+  removeFromSongsILike: (songId: string) => void
+  updateSongILikeTags: (songId: string, tags: string[]) => void
+  addSongFromCollection: (savedSongId: string, themeId: string) => void
+
+  // === Competitor Analysis (Feature 7 & 8) ===
+  setCompetitorAnalysis: (data: CompetitorAnalysisData | null) => void
+  clearCompetitorAnalysis: () => void
 }
 
 export const useMusicLeagueStore = create<MusicLeagueState>()(
@@ -162,7 +190,9 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
       isProcessing: false,
       error: null,
       userProfile: null,
-      _version: 2,
+      songsILike: [],
+      competitorAnalysis: null,
+      _version: 3,
 
       // === Getters ===
       activeTheme: () => {
@@ -1026,10 +1056,174 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
         return lines.join('\n')
       },
+
+      // === Phase Progression (Feature 3) ===
+      computeThemePhase: (theme: MusicLeagueTheme): ThemePhase => {
+        // Complete: has a pick
+        if (theme.pick) return 'complete'
+
+        // Decide: 4+ semifinalists
+        if (theme.semifinalists.length >= PHASE_THRESHOLDS.decide.semifinalists) return 'decide'
+
+        // Refine: 8+ candidates
+        if (theme.candidates.length >= PHASE_THRESHOLDS.refine.candidates) return 'refine'
+
+        // Brainstorm: theme exists (has candidates or just created)
+        if (theme.candidates.length > 0 || theme.id) return 'brainstorm'
+
+        return 'idle'
+      },
+
+      updateThemePhase: (themeId: string) => {
+        const state = get()
+        const theme = state.themes.find(t => t.id === themeId)
+        if (!theme) return
+
+        const newPhase = state.computeThemePhase(theme)
+        if (newPhase !== theme.phase) {
+          set((state) => ({
+            themes: state.themes.map(t =>
+              t.id === themeId
+                ? { ...t, phase: newPhase, updatedAt: Date.now() }
+                : t
+            ),
+          }))
+        }
+      },
+
+      // === Hall Pass System (Feature 4) ===
+      useHallPass: (themeId: string, tier: 'semifinals' | 'finals', song: Song): boolean => {
+        const state = get()
+        const theme = state.themes.find(t => t.id === themeId)
+        if (!theme) return false
+
+        const passUsed = tier === 'semifinals'
+          ? theme.hallPassesUsed?.semifinals
+          : theme.hallPassesUsed?.finals
+
+        if (passUsed) return false // Hall pass already used
+
+        // Check tier limits
+        const targetTier = tier === 'semifinals' ? 'semifinalists' : 'finalists'
+        const currentCount = tier === 'semifinals'
+          ? theme.semifinalists.length
+          : theme.finalists.length
+        const limit = FUNNEL_TIER_LIMITS[targetTier]
+
+        if (currentCount >= limit) return false // Tier is full
+
+        // Use the hall pass and add the song
+        set((state) => ({
+          themes: state.themes.map(t => {
+            if (t.id !== themeId) return t
+
+            const updatedHallPasses: HallPassesUsed = {
+              semifinals: t.hallPassesUsed?.semifinals || false,
+              finals: t.hallPassesUsed?.finals || false,
+            }
+
+            if (tier === 'semifinals') {
+              updatedHallPasses.semifinals = true
+            } else {
+              updatedHallPasses.finals = true
+            }
+
+            const songWithTier = {
+              ...song,
+              id: song.id || generateSongId(),
+              currentTier: targetTier,
+              addedAt: Date.now(),
+            }
+
+            return {
+              ...t,
+              hallPassesUsed: updatedHallPasses,
+              [targetTier]: tier === 'semifinals'
+                ? [...t.semifinalists, songWithTier]
+                : [...t.finalists, songWithTier],
+              updatedAt: Date.now(),
+            }
+          }),
+        }))
+
+        // Update phase after hall pass
+        get().updateThemePhase(themeId)
+        return true
+      },
+
+      getHallPassesAvailable: (themeId: string): HallPassesUsed => {
+        const theme = get().themes.find(t => t.id === themeId)
+        return {
+          semifinals: !(theme?.hallPassesUsed?.semifinals ?? false),
+          finals: !(theme?.hallPassesUsed?.finals ?? false),
+        }
+      },
+
+      // === Songs I Like Collection (Feature 6) ===
+      addToSongsILike: (song: Song, tags?: string[], notes?: string, sourceThemeId?: string) => {
+        const savedSong: SavedSong = {
+          ...song,
+          id: song.id || generateSongId(),
+          savedAt: Date.now(),
+          tags: tags || [],
+          notes: notes || '',
+          sourceThemeId,
+        }
+
+        set((state) => ({
+          songsILike: [...state.songsILike, savedSong],
+        }))
+      },
+
+      removeFromSongsILike: (songId: string) => {
+        set((state) => ({
+          songsILike: state.songsILike.filter(s => s.id !== songId),
+        }))
+      },
+
+      updateSongILikeTags: (songId: string, tags: string[]) => {
+        set((state) => ({
+          songsILike: state.songsILike.map(s =>
+            s.id === songId ? { ...s, tags } : s
+          ),
+        }))
+      },
+
+      addSongFromCollection: (savedSongId: string, themeId: string) => {
+        const state = get()
+        const savedSong = state.songsILike.find(s => s.id === savedSongId)
+        if (!savedSong) return
+
+        // Convert to regular song and add to theme candidates
+        const song: Song = {
+          id: generateSongId(),
+          title: savedSong.title,
+          artist: savedSong.artist,
+          album: savedSong.album,
+          year: savedSong.year,
+          genre: savedSong.genre,
+          reason: savedSong.notes || 'Added from Songs I Like collection',
+          spotifyTrackId: savedSong.spotifyTrackId,
+          spotifyUri: savedSong.spotifyUri,
+          youtubeVideoId: savedSong.youtubeVideoId,
+          youtubeUrl: savedSong.youtubeUrl,
+        }
+
+        get().addCandidateToTheme(themeId, song)
+      },
+
+      // === Competitor Analysis (Feature 7 & 8) ===
+      setCompetitorAnalysis: (data: CompetitorAnalysisData | null) => {
+        set({ competitorAnalysis: data })
+      },
+
+      clearCompetitorAnalysis: () => {
+        set({ competitorAnalysis: null })
+      },
     }),
     {
       name: 'music-league-strategist',
-      version: 2,
+      version: 3,
       partialize: (state) => ({
         themes: state.themes,
         activeThemeId: state.activeThemeId,
@@ -1037,6 +1231,8 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
         activeSessionId: state.activeSessionId,
         userProfile: state.userProfile,
         strategistModel: state.strategistModel,
+        songsILike: state.songsILike,
+        competitorAnalysis: state.competitorAnalysis,
         _version: state._version,
       }),
     }

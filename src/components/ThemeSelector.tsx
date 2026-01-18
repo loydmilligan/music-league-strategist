@@ -1,4 +1,4 @@
-import { Plus, Archive, Clock, CheckCircle } from 'lucide-react'
+import { Plus, Archive, CheckCircle, Calendar } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -8,9 +8,18 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import type { MusicLeagueTheme } from '@/types/musicLeague'
 import { cn } from '@/lib/utils'
+import { DeadlineIndicator } from '@/components/DeadlineIndicator'
+import { PhaseBadge } from '@/components/PhaseProgressBar'
 
 interface ThemeSelectorProps {
   onNewTheme?: () => void
@@ -35,25 +44,31 @@ function getStatusBadge(theme: MusicLeagueTheme): React.ReactElement | null {
     )
   }
   if (theme.deadline) {
-    const now = Date.now()
-    const daysLeft = Math.ceil((theme.deadline - now) / (1000 * 60 * 60 * 24))
-    if (daysLeft <= 2 && daysLeft > 0) {
-      return (
-        <Badge variant="destructive" className="ml-2 text-xs">
-          <Clock className="mr-1 h-3 w-3" />
-          {daysLeft}d left
-        </Badge>
-      )
-    }
+    return <DeadlineIndicator deadline={theme.deadline} className="ml-2" />
   }
   return null
 }
 
+// Helper to format datetime for input
+function formatDateTimeForInput(timestamp: number | undefined): string {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  // Format: YYYY-MM-DDTHH:MM
+  return date.toISOString().slice(0, 16)
+}
+
+// Helper to parse datetime input to timestamp
+function parseDateTimeInput(value: string): number | undefined {
+  if (!value) return undefined
+  return new Date(value).getTime()
+}
+
 export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): React.ReactElement {
-  const { themes, activeThemeId, setActiveTheme, createTheme } = useMusicLeagueStore()
+  const { themes, activeThemeId, setActiveTheme, createTheme, setThemeDeadline, activeTheme } = useMusicLeagueStore()
 
   const activeThemes = themes.filter((t) => t.status === 'active')
   const archivedThemes = themes.filter((t) => t.status === 'archived' || t.status === 'submitted')
+  const currentTheme = activeTheme()
 
   const handleNewTheme = (): void => {
     if (onNewTheme) {
@@ -63,6 +78,12 @@ export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): Re
       const id = createTheme('New Theme')
       setActiveTheme(id)
     }
+  }
+
+  const handleDeadlineChange = (value: string): void => {
+    if (!activeThemeId) return
+    const deadline = parseDateTimeInput(value)
+    setThemeDeadline(activeThemeId, deadline)
   }
 
   return (
@@ -112,6 +133,57 @@ export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): Re
           )}
         </SelectContent>
       </Select>
+
+      {/* Deadline Picker (Feature 2) */}
+      {activeThemeId && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn(
+                'h-8 w-8',
+                currentTheme?.deadline && 'border-primary'
+              )}
+              title="Set Deadline"
+            >
+              <Calendar className="h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-3" align="start">
+            <div className="space-y-2">
+              <Label htmlFor="deadline" className="text-xs font-medium">
+                Deadline
+              </Label>
+              <Input
+                id="deadline"
+                type="datetime-local"
+                value={formatDateTimeForInput(currentTheme?.deadline)}
+                onChange={(e) => handleDeadlineChange(e.target.value)}
+                className="w-full"
+              />
+              {currentTheme?.deadline && (
+                <div className="flex items-center justify-between">
+                  <DeadlineIndicator deadline={currentTheme.deadline} />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-destructive"
+                    onClick={() => handleDeadlineChange('')}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
+
+      {/* Phase Badge (Feature 3) */}
+      {currentTheme?.phase && currentTheme.phase !== 'idle' && (
+        <PhaseBadge phase={currentTheme.phase} />
+      )}
 
       <Button
         variant="outline"

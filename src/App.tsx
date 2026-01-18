@@ -2,6 +2,8 @@ import { Music2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MusicLeagueStrategist } from '@/components/MusicLeagueStrategist'
 import { SettingsModal } from '@/components/SettingsModal'
+import { SongsILikeButton } from '@/components/SongsILikePanel'
+import { CompetitorAnalysisPanel } from '@/components/CompetitorAnalysisPanel'
 import { useSettingsStore } from '@/stores/settingsStore'
 
 function App(): React.ReactElement {
@@ -18,13 +20,17 @@ function App(): React.ReactElement {
           </div>
           <span className="font-semibold">Music League Strategist</span>
         </div>
-        <SettingsModal
-          trigger={
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Settings className="h-4 w-4" />
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-1">
+          <SongsILikeButton />
+          <CompetitorAnalysisPanel />
+          <SettingsModal
+            trigger={
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Settings className="h-4 w-4" />
+              </Button>
+            }
+          />
+        </div>
       </header>
 
       {/* Main Content */}

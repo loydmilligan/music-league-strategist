@@ -9,6 +9,7 @@ import {
   Music,
   Sparkles,
   Info,
+  Ticket,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,10 +18,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import type { Song, FunnelTier, MusicLeagueTheme } from '@/types/musicLeague'
 import { FUNNEL_TIER_LIMITS } from '@/types/musicLeague'
 import { cn } from '@/lib/utils'
+import { PhaseProgressBar } from '@/components/PhaseProgressBar'
 
 interface FunnelVisualizationProps {
   theme: MusicLeagueTheme
@@ -466,6 +474,8 @@ export function FunnelVisualization({
   className,
   onSongClick,
 }: FunnelVisualizationProps): React.ReactElement {
+  const { getHallPassesAvailable, computeThemePhase } = useMusicLeagueStore()
+
   const getSongsForTier = (tier: FunnelTier): Song[] => {
     switch (tier) {
       case 'pick':
@@ -479,8 +489,75 @@ export function FunnelVisualization({
     }
   }
 
+  // Compute current phase
+  const currentPhase = computeThemePhase(theme)
+
+  // Get hall pass availability
+  const hallPasses = getHallPassesAvailable(theme.id)
+
   return (
-    <div className={cn('space-y-2', className)}>
+    <div className={cn('space-y-3', className)}>
+      {/* Phase Progress (Feature 3) */}
+      {!compact && (
+        <PhaseProgressBar
+          currentPhase={currentPhase}
+          candidateCount={theme.candidates.length}
+          semifinalistCount={theme.semifinalists.length}
+          finalistCount={theme.finalists.length}
+          hasPick={theme.pick !== null}
+          compact={true}
+        />
+      )}
+
+      {/* Hall Pass Indicators (Feature 4) */}
+      {!compact && (currentPhase === 'refine' || currentPhase === 'decide') && (
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Hall Passes:</span>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant={hallPasses.semifinals ? 'outline' : 'secondary'}
+                  className={cn(
+                    'gap-1 cursor-help',
+                    hallPasses.semifinals ? 'text-green-500 border-green-500/50' : 'opacity-50'
+                  )}
+                >
+                  <Ticket className="h-3 w-3" />
+                  Semi
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                {hallPasses.semifinals
+                  ? 'Available: Skip directly to semifinalists'
+                  : 'Used: Already added a late song to semifinalists'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant={hallPasses.finals ? 'outline' : 'secondary'}
+                  className={cn(
+                    'gap-1 cursor-help',
+                    hallPasses.finals ? 'text-purple-500 border-purple-500/50' : 'opacity-50'
+                  )}
+                >
+                  <Ticket className="h-3 w-3" />
+                  Finals
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                {hallPasses.finals
+                  ? 'Available: Skip directly to finalists'
+                  : 'Used: Already added a late song to finalists'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
+
       {TIER_CONFIGS.map((config) => (
         <TierSection
           key={config.tier}

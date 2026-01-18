@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Pencil,
   X,
+  Heart,
+  HeartOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -195,7 +197,7 @@ export function SongDetailSlideout({
   open,
   onOpenChange,
 }: SongDetailSlideoutProps): React.ReactElement {
-  const { updateSongInTheme } = useMusicLeagueStore()
+  const { updateSongInTheme, addToSongsILike, songsILike, removeFromSongsILike } = useMusicLeagueStore()
   const openRouterKey = useSettingsStore((s) => s.openRouterKey)
   const defaultModel = useSettingsStore((s) => s.defaultModel)
 
@@ -513,6 +515,45 @@ Keep it concise (3-4 sentences max). Be direct and opinionated.`
                 <Badge variant="secondary">{song.currentTier}</Badge>
               )}
             </div>
+
+            {/* Save for Later Button (Feature 6) */}
+            {(() => {
+              const isSaved = songsILike.some(
+                s => s.title.toLowerCase() === song.title.toLowerCase() &&
+                     s.artist.toLowerCase() === song.artist.toLowerCase()
+              )
+              const savedSong = songsILike.find(
+                s => s.title.toLowerCase() === song.title.toLowerCase() &&
+                     s.artist.toLowerCase() === song.artist.toLowerCase()
+              )
+
+              return (
+                <Button
+                  variant={isSaved ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="w-full gap-2"
+                  onClick={() => {
+                    if (isSaved && savedSong) {
+                      removeFromSongsILike(savedSong.id)
+                    } else {
+                      addToSongsILike(song, [], notes, themeId || undefined)
+                    }
+                  }}
+                >
+                  {isSaved ? (
+                    <>
+                      <HeartOff className="h-4 w-4" />
+                      Remove from Songs I Like
+                    </>
+                  ) : (
+                    <>
+                      <Heart className="h-4 w-4 text-red-500" />
+                      Save for Later
+                    </>
+                  )}
+                </Button>
+              )
+            })()}
 
             {/* AI Reason */}
             {song.reason && (
