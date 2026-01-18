@@ -91,6 +91,13 @@ export function useServerSync() {
   const setSongsILikeFromServer = useMusicLeagueStore((s) => s.setSongsILikeFromServer)
   const setCompetitorAnalysis = useMusicLeagueStore((s) => s.setCompetitorAnalysis)
 
+  // Settings store setters
+  const setOpenRouterKey = useSettingsStore((s) => s.setOpenRouterKey)
+  const setDefaultModel = useSettingsStore((s) => s.setDefaultModel)
+  const setSpotify = useSettingsStore((s) => s.setSpotify)
+  const setYoutubeMusic = useSettingsStore((s) => s.setYoutubeMusic)
+  const setNtfy = useSettingsStore((s) => s.setNtfy)
+
   // Initialize from server
   const initialize = useCallback(async () => {
     if (initAttempted.current) return
@@ -129,12 +136,13 @@ export function useServerSync() {
       }
 
       // Load from server
-      const [themes, sessions, profile, savedSongs, competitorData] = await Promise.all([
+      const [themes, sessions, profile, savedSongs, competitorData, settings] = await Promise.all([
         api.getThemes(),
         api.getSessions(),
         api.getProfile().catch(() => null),
         api.getSavedSongs().catch(() => []),
         api.getCompetitorAnalysis().catch(() => null),
+        api.getSettings().catch(() => null),
       ])
 
       // Update stores with server data
@@ -143,6 +151,15 @@ export function useServerSync() {
       if (profile && setUserProfile) setUserProfile(profile)
       if (setSongsILikeFromServer) setSongsILikeFromServer(savedSongs)
       if (competitorData && setCompetitorAnalysis) setCompetitorAnalysis(competitorData)
+
+      // Update settings store with server settings
+      if (settings) {
+        if (settings.openRouterKey) setOpenRouterKey(settings.openRouterKey)
+        if (settings.defaultModel) setDefaultModel(settings.defaultModel)
+        if (settings.spotify) setSpotify(settings.spotify)
+        if (settings.youtubeMusic) setYoutubeMusic(settings.youtubeMusic)
+        if (settings.ntfy) setNtfy(settings.ntfy)
+      }
 
       setState((s) => ({
         ...s,
@@ -169,7 +186,7 @@ export function useServerSync() {
         error: message,
       }))
     }
-  }, [setThemesFromServer, setSessionsFromServer, setUserProfile, setSongsILikeFromServer, setCompetitorAnalysis])
+  }, [setThemesFromServer, setSessionsFromServer, setUserProfile, setSongsILikeFromServer, setCompetitorAnalysis, setOpenRouterKey, setDefaultModel, setSpotify, setYoutubeMusic, setNtfy])
 
   // Migrate local data to server
   const migrateToServer = useCallback(async () => {
