@@ -30,7 +30,7 @@ import type { AIModel } from '@/types/models'
 import { openRouterService } from '@/services/openrouter'
 import { youtubeMusicService } from '@/services/youtubeMusic'
 import { spotifyService } from '@/services/spotify'
-import type { AIConversationResponse, Song, RejectedSong, SessionPreference, LongTermPreference, TierAction } from '@/types/musicLeague'
+import type { AIConversationResponse, Song, RejectedSong, SessionPreference, LongTermPreference, TierAction, MusicLeagueSession } from '@/types/musicLeague'
 import { cn } from '@/lib/utils'
 import { ThemeSelector } from './ThemeSelector'
 import { SessionManager } from './SessionManager'
@@ -207,7 +207,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
 
   // Main send handler
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isProcessing || !session) return
+    if (!input.trim() || isProcessing) return
 
     const userMessage = input.trim()
     setInput('')
@@ -221,12 +221,34 @@ export function MusicLeagueStrategist(): React.ReactElement {
 
     // If no theme exists, create one from the first message
     let currentTheme = theme
+    let currentThemeId = activeThemeId
     if (!currentTheme) {
-      const themeId = createTheme(userMessage)
-      currentTheme = themes.find((t) => t.id === themeId)
+      currentThemeId = createTheme(userMessage)
+      currentTheme = themes.find((t) => t.id === currentThemeId)
 
       // Also update the session's legacy theme field
       setTheme({ rawTheme: userMessage })
+    }
+
+    // If no session exists, create one for the theme
+    let currentSession = session
+    if (!currentSession && currentThemeId) {
+      const sessionId = createSession(currentThemeId)
+      currentSession = sessions.find((s) => s.id === sessionId) || {
+        id: sessionId,
+        themeId: currentThemeId,
+        title: userMessage.slice(0, 50),
+        phase: 'brainstorm',
+        iterationCount: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as MusicLeagueSession
+    }
+
+    // Still no session? Return early
+    if (!currentSession) {
+      setError('Could not create session. Please try again.')
+      return
     }
 
     // Add user message to conversation
@@ -239,11 +261,11 @@ export function MusicLeagueStrategist(): React.ReactElement {
       const aggregatedRejected = currentTheme ? getAggregatedRejectedSongs(currentTheme.id) : []
       const aggregatedPrefs = currentTheme ? getAggregatedPreferences(currentTheme.id) : []
 
-      const systemPrompt = session.phase === 'finalists' || session.phase === 'decide'
-        ? getFinalistsPrompt(session)
+      const systemPrompt = currentSession.phase === 'finalists' || currentSession.phase === 'decide'
+        ? getFinalistsPrompt(currentSession)
         : currentTheme
-          ? getConversationPromptWithTheme(session, currentTheme, aggregatedRejected, aggregatedPrefs, userProfile)
-          : getConversationPrompt(session, userProfile)
+          ? getConversationPromptWithTheme(currentSession, currentTheme, aggregatedRejected, aggregatedPrefs, userProfile)
+          : getConversationPrompt(currentSession, userProfile)
 
       // Build messages
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
@@ -277,7 +299,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
             genre: c.genre,
             reason: c.reason,
             question: c.question,
-            addedInSessionId: session.id,
+            addedInSessionId: currentSession.id,
           }))
 
           // Enrich candidates with Spotify track IDs and YouTube links via Songlink
@@ -294,8 +316,8 @@ export function MusicLeagueStrategist(): React.ReactElement {
         if (parsed.interpretation && currentTheme) {
           updateTheme(currentTheme.id, { interpretation: parsed.interpretation })
           // Also update session's legacy theme
-          if (session.theme) {
-            setTheme({ ...session.theme, interpretation: parsed.interpretation })
+          if (currentSession.theme) {
+            setTheme({ ...currentSession.theme, interpretation: parsed.interpretation })
           }
         }
 
@@ -359,10 +381,10 @@ export function MusicLeagueStrategist(): React.ReactElement {
             }
 
             // Extract long-term preferences from session
-            if (session.sessionPreferences && session.sessionPreferences.length > 0) {
+            if (currentSession.sessionPreferences && currentSession.sessionPreferences.length > 0) {
               try {
                 const extractionPrompt = getLongTermPreferencePrompt(
-                  session.sessionPreferences,
+                  currentSession.sessionPreferences,
                   userProfile?.longTermPreferences || []
                 )
                 const extractionMessages: Array<{ role: 'system' | 'user'; content: string }> = [
@@ -444,6 +466,9 @@ export function MusicLeagueStrategist(): React.ReactElement {
     addLongTermPreferences,
     setFinalPick,
     createTheme,
+    createSession,
+    activeThemeId,
+    sessions,
     getAggregatedRejectedSongs,
     getAggregatedPreferences,
     handleTierActions,
