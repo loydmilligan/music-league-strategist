@@ -267,10 +267,11 @@ export function MusicLeagueStrategist(): React.ReactElement {
           ? getConversationPromptWithTheme(currentSession, currentTheme, aggregatedRejected, aggregatedPrefs, userProfile)
           : getConversationPrompt(currentSession, userProfile)
 
-      // Build messages
+      // Build messages (use currentSession's history since component state may not be updated yet)
+      const currentConversation = currentSession.conversationHistory || []
       const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
         { role: 'system', content: systemPrompt },
-        ...conversation.map((entry) => ({
+        ...currentConversation.map((entry) => ({
           role: entry.role as 'user' | 'assistant',
           content: entry.content,
         })),
