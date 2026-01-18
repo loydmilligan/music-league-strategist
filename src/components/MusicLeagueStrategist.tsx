@@ -103,6 +103,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
     addCandidateToTheme,
     exportFunnelSummary,
     updateTheme,
+    addToSongsILike,
   } = useMusicLeagueStore()
 
   // Settings
@@ -437,6 +438,19 @@ export function MusicLeagueStrategist(): React.ReactElement {
                 console.error('Failed to extract long-term preferences:', err)
               }
             }
+          } else if (parsed.action === 'save_to_liked' && parsed.songToSave) {
+            // Handle save to Songs I Like collection
+            const songToSave = parsed.songToSave
+            const newSong: Song = {
+              id: `saved-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+              title: songToSave.title,
+              artist: songToSave.artist,
+              album: songToSave.album,
+              year: songToSave.year,
+              genre: songToSave.genre,
+              reason: songToSave.reason || 'Saved from conversation',
+            }
+            addToSongsILike(newSong, [], songToSave.reason, currentTheme?.id)
           }
         }
 
@@ -488,6 +502,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
     updateTheme,
     addCandidateToTheme,
     promoteSong,
+    addToSongsILike,
   ])
 
   // Create playlist handler

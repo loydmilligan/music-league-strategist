@@ -229,7 +229,16 @@ export interface AIConversationResponse {
   }>
   message: string           // Conversational response text
   interpretation?: string   // Theme interpretation (first response only)
-  action?: 'create_playlist:spotify' | 'create_playlist:youtube' | 'enter_finalists' | 'finalize_pick' | null
+  action?: 'create_playlist:spotify' | 'create_playlist:youtube' | 'enter_finalists' | 'finalize_pick' | 'save_to_liked' | null
+  // Song to save when action is 'save_to_liked'
+  songToSave?: {
+    title: string
+    artist: string
+    album?: string
+    year?: number
+    genre?: string
+    reason?: string  // Why they want to save it (optional)
+  }
   // Extracted preferences from user's last message
   extractedPreferences?: Array<{
     statement: string       // Clear preference, e.g., "Dislikes slow tempo"
@@ -383,6 +392,32 @@ Set "action": "enter_finalists"
 If the player says they've chosen their final song:
 - "I'm going with [Song]", "This is my pick", "[Song] is the one"
 Set "action": "finalize_pick"
+
+=== SAVE TO SONGS I LIKE (IMPORTANT) ===
+If the player asks to save a song to their "Songs I Like" collection:
+- "save this to my liked songs", "add to songs I like", "remember this song for later"
+- "save [Song] for later", "I like [Song], save it", "add [Song] to my collection"
+- "keep this one on file", "bookmark this song"
+
+Set "action": "save_to_liked" and include "songToSave" with the song details.
+
+CRITICAL: This is NOT about theme fit. The player wants to save a song for future reference.
+Do NOT argue about whether the song fits the current theme.
+Do NOT suggest alternatives. Just acknowledge and save it.
+
+Example response when saving:
+{
+  "candidates": [...], // Keep current candidates unchanged
+  "message": "Got it! I've saved [Song] by [Artist] to your Songs I Like collection. You can find it there for future themes. Now, back to the current theme...",
+  "action": "save_to_liked",
+  "songToSave": {
+    "title": "Song Title",
+    "artist": "Artist Name",
+    "album": "Album Name",
+    "year": 1985,
+    "genre": "Rock"
+  }
+}
 
 === AFTER PLAYLIST CREATION ===
 When responding after a playlist was just created:
