@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import {
   Trophy,
   Star,
@@ -12,6 +12,8 @@ import {
   Ticket,
   VolumeX,
   Volume2,
+  FileDown,
+  FileUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -507,13 +509,34 @@ function TierSection({ config, songs, themeId, compact, onSongClick }: TierSecti
   )
 }
 
+// Funnel export data structure
+interface FunnelExportData {
+  version: number
+  exportedAt: number
+  theme: {
+    id: string
+    title: string
+    rawTheme: string
+    interpretation?: string
+    strategy?: string
+  }
+  funnel: {
+    pick: Song | null
+    finalists: Song[]
+    semifinalists: Song[]
+    candidates: Song[]
+  }
+}
+
 export function FunnelVisualization({
   theme,
   compact = false,
   className,
   onSongClick,
 }: FunnelVisualizationProps): React.ReactElement {
-  const { getHallPassesAvailable, computeThemePhase } = useMusicLeagueStore()
+  const { getHallPassesAvailable, computeThemePhase, updateTheme } = useMusicLeagueStore()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [importError, setImportError] = useState<string | null>(null)
 
   const getSongsForTier = (tier: FunnelTier): Song[] => {
     switch (tier) {
@@ -528,11 +551,95 @@ export function FunnelVisualization({
     }
   }
 
+  // Export funnel data to JSON file
+  const handleExport = useCallback(() => {
+    const exportData: FunnelExportData = {
+      version: 1,
+      exportedAt: Date.now(),
+      theme: {
+        id: theme.id,
+        title: theme.title,
+        rawTheme: theme.rawTheme,
+        interpretation: theme.interpretation,
+        strategy: theme.strategy,
+      },
+      funnel: {
+        pick: theme.pick,
+        finalists: theme.finalists ?? [],
+        semifinalists: theme.semifinalists ?? [],
+        candidates: theme.candidates ?? [],
+      },
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `funnel-${theme.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [theme])
+
+  // Import funnel data from JSON file
+  const handleImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setImportError(null)
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string) as FunnelExportData
+
+        // Validate the data
+        if (!data.version || !data.funnel) {
+          throw new Error('Invalid funnel export file')
+        }
+
+        // Update the theme with imported funnel data
+        updateTheme(theme.id, {
+          pick: data.funnel.pick,
+          finalists: data.funnel.finalists ?? [],
+          semifinalists: data.funnel.semifinalists ?? [],
+          candidates: data.funnel.candidates ?? [],
+          // Optionally restore theme interpretation if it was empty
+          ...(data.theme.interpretation && !theme.interpretation
+            ? { interpretation: data.theme.interpretation }
+            : {}),
+          ...(data.theme.strategy && !theme.strategy
+            ? { strategy: data.theme.strategy }
+            : {}),
+        })
+
+        // Reset the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      } catch (err) {
+        setImportError(err instanceof Error ? err.message : 'Failed to import funnel')
+        // Reset the file input
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+    }
+    reader.readAsText(file)
+  }, [theme.id, theme.interpretation, theme.strategy, updateTheme])
+
   // Compute current phase
   const currentPhase = computeThemePhase(theme)
 
   // Get hall pass availability
   const hallPasses = getHallPassesAvailable(theme.id)
+
+  // Count total songs in funnel
+  const totalSongs = (theme.pick ? 1 : 0) +
+    (theme.finalists?.length ?? 0) +
+    (theme.semifinalists?.length ?? 0) +
+    (theme.candidates?.length ?? 0)
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -546,6 +653,68 @@ export function FunnelVisualization({
           hasPick={theme.pick !== null}
           compact={true}
         />
+      )}
+
+      {/* Export/Import Controls */}
+      {!compact && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {totalSongs} song{totalSongs !== 1 ? 's' : ''} in funnel
+          </span>
+          <div className="flex items-center gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={handleExport}
+                    disabled={totalSongs === 0}
+                  >
+                    <FileDown className="h-3.5 w-3.5" />
+                    Export
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Download funnel as backup file
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 text-xs"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <FileUp className="h-3.5 w-3.5" />
+                    Import
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Restore funnel from backup file
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImport}
+              className="hidden"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Import Error */}
+      {importError && (
+        <div className="text-xs text-red-500 bg-red-500/10 rounded px-2 py-1">
+          {importError}
+        </div>
       )}
 
       {/* Hall Pass Indicators (Feature 4) */}
