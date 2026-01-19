@@ -73,12 +73,41 @@ api.get('/health', (req, res) => {
 async function initDatabase() {
   const client = await pool.connect()
   try {
+    // Check if we need to migrate from UUID to TEXT schema
+    const schemaCheck = await client.query(`
+      SELECT data_type FROM information_schema.columns
+      WHERE table_name = 'themes' AND column_name = 'id'
+    `)
+
+    const needsSchemaMigration = schemaCheck.rows.length > 0 && schemaCheck.rows[0].data_type === 'uuid'
+
+    if (needsSchemaMigration) {
+      console.log('Migrating database schema from UUID to TEXT IDs...')
+      await client.query(`
+        DROP TABLE IF EXISTS conversation_history CASCADE;
+        DROP TABLE IF EXISTS session_songs CASCADE;
+        DROP TABLE IF EXISTS session_preferences CASCADE;
+        DROP TABLE IF EXISTS rejected_songs CASCADE;
+        DROP TABLE IF EXISTS theme_songs CASCADE;
+        DROP TABLE IF EXISTS saved_songs CASCADE;
+        DROP TABLE IF EXISTS long_term_preferences CASCADE;
+        DROP TABLE IF EXISTS sessions CASCADE;
+        DROP TABLE IF EXISTS songs CASCADE;
+        DROP TABLE IF EXISTS themes CASCADE;
+        DROP TABLE IF EXISTS user_profile CASCADE;
+        DROP TABLE IF EXISTS competitor_analysis CASCADE;
+        DROP TABLE IF EXISTS settings CASCADE;
+        DROP TABLE IF EXISTS ai_models CASCADE;
+      `)
+      console.log('Old tables dropped, creating new schema...')
+    }
+
     await client.query(`
       CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-      -- Themes table
+      -- Themes table (using TEXT for IDs to support frontend-generated IDs)
       CREATE TABLE IF NOT EXISTS themes (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY,
         raw_theme TEXT NOT NULL,
         interpretation TEXT,
         strategy TEXT,
@@ -94,7 +123,7 @@ async function initDatabase() {
 
       -- Songs table (central song repository)
       CREATE TABLE IF NOT EXISTS songs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         artist VARCHAR(255) NOT NULL,
         album VARCHAR(255),
@@ -118,9 +147,9 @@ async function initDatabase() {
 
       -- Theme-Song relationship (tracks which songs are in which theme/tier)
       CREATE TABLE IF NOT EXISTS theme_songs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        theme_id UUID REFERENCES themes(id) ON DELETE CASCADE,
-        song_id UUID REFERENCES songs(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        theme_id TEXT REFERENCES themes(id) ON DELETE CASCADE,
+        song_id TEXT REFERENCES songs(id) ON DELETE CASCADE,
         tier VARCHAR(20) NOT NULL,
         rank INTEGER,
         added_at BIGINT NOT NULL,
@@ -129,12 +158,12 @@ async function initDatabase() {
 
       -- Sessions table
       CREATE TABLE IF NOT EXISTS sessions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        theme_id UUID REFERENCES themes(id) ON DELETE SET NULL,
+        id TEXT PRIMARY KEY,
+        theme_id TEXT REFERENCES themes(id) ON DELETE SET NULL,
         title VARCHAR(255) NOT NULL,
         phase VARCHAR(50),
         iteration_count INTEGER DEFAULT 0,
-        final_pick_id UUID,
+        final_pick_id TEXT,
         playlist_created JSONB,
         created_at BIGINT NOT NULL,
         updated_at BIGINT NOT NULL
@@ -142,8 +171,8 @@ async function initDatabase() {
 
       -- Conversation history
       CREATE TABLE IF NOT EXISTS conversation_history (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
         role VARCHAR(20) NOT NULL,
         content TEXT NOT NULL,
         timestamp BIGINT NOT NULL
@@ -151,16 +180,16 @@ async function initDatabase() {
 
       -- Session working candidates (songs being considered in a session)
       CREATE TABLE IF NOT EXISTS session_songs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
-        song_id UUID REFERENCES songs(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
+        song_id TEXT REFERENCES songs(id) ON DELETE CASCADE,
         UNIQUE(session_id, song_id)
       );
 
       -- Rejected songs
       CREATE TABLE IF NOT EXISTS rejected_songs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
         title VARCHAR(255) NOT NULL,
         artist VARCHAR(255) NOT NULL,
         reason TEXT,
@@ -169,8 +198,8 @@ async function initDatabase() {
 
       -- Session preferences
       CREATE TABLE IF NOT EXISTS session_preferences (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        session_id UUID REFERENCES sessions(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
         statement TEXT NOT NULL,
         confidence VARCHAR(20),
         source VARCHAR(50),
@@ -179,7 +208,7 @@ async function initDatabase() {
 
       -- User profile
       CREATE TABLE IF NOT EXISTS user_profile (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id VARCHAR(50) DEFAULT 'default',
         summary TEXT,
         categories JSONB DEFAULT '{}',
@@ -191,7 +220,7 @@ async function initDatabase() {
 
       -- Long-term preferences
       CREATE TABLE IF NOT EXISTS long_term_preferences (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id VARCHAR(50) DEFAULT 'default',
         statement TEXT NOT NULL,
         specificity VARCHAR(20),
@@ -201,17 +230,17 @@ async function initDatabase() {
 
       -- Saved songs (Songs I Like collection)
       CREATE TABLE IF NOT EXISTS saved_songs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        song_id UUID REFERENCES songs(id) ON DELETE CASCADE,
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        song_id TEXT REFERENCES songs(id) ON DELETE CASCADE,
         tags TEXT[],
         notes TEXT,
-        source_theme_id UUID REFERENCES themes(id) ON DELETE SET NULL,
+        source_theme_id TEXT REFERENCES themes(id) ON DELETE SET NULL,
         saved_at BIGINT NOT NULL
       );
 
       -- Competitor analysis
       CREATE TABLE IF NOT EXISTS competitor_analysis (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id VARCHAR(50) DEFAULT 'default',
         league_name VARCHAR(255),
         data JSONB NOT NULL,
@@ -221,7 +250,7 @@ async function initDatabase() {
 
       -- Settings
       CREATE TABLE IF NOT EXISTS settings (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id VARCHAR(50) DEFAULT 'default',
         settings JSONB NOT NULL DEFAULT '{}',
         updated_at BIGINT NOT NULL,
@@ -230,7 +259,7 @@ async function initDatabase() {
 
       -- AI models
       CREATE TABLE IF NOT EXISTS ai_models (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
         model_id VARCHAR(255) UNIQUE NOT NULL,
         nickname VARCHAR(100),
         description TEXT,
@@ -371,14 +400,26 @@ api.get('/themes/:id', async (req, res) => {
 // Create theme
 api.post('/themes', async (req, res) => {
   try {
-    const { rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist } = req.body
+    const { id, rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist, createdAt, updatedAt } = req.body
     const now = Date.now()
+    const themeId = id || generateUUID()
 
     const result = await pool.query(`
-      INSERT INTO themes (raw_theme, title, interpretation, strategy, status, deadline, phase, hall_passes_used, spotify_playlist, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO themes (id, raw_theme, title, interpretation, strategy, status, deadline, phase, hall_passes_used, spotify_playlist, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ON CONFLICT (id) DO UPDATE SET
+        raw_theme = EXCLUDED.raw_theme,
+        title = EXCLUDED.title,
+        interpretation = EXCLUDED.interpretation,
+        strategy = EXCLUDED.strategy,
+        status = EXCLUDED.status,
+        deadline = EXCLUDED.deadline,
+        phase = EXCLUDED.phase,
+        hall_passes_used = EXCLUDED.hall_passes_used,
+        spotify_playlist = EXCLUDED.spotify_playlist,
+        updated_at = EXCLUDED.updated_at
       RETURNING *
-    `, [rawTheme, title, interpretation, strategy, status || 'active', deadline, phase || 'brainstorm', hallPassesUsed || { semifinals: false, finals: false }, spotifyPlaylist, now, now])
+    `, [themeId, rawTheme, title, interpretation, strategy, status || 'active', deadline, phase || 'brainstorm', hallPassesUsed || { semifinals: false, finals: false }, spotifyPlaylist, createdAt || now, updatedAt || now])
 
     const row = result.rows[0]
     res.status(201).json({
@@ -465,7 +506,8 @@ api.post('/themes/:themeId/songs', async (req, res) => {
 
     await client.query('BEGIN')
 
-    // Insert or update song
+    // Insert or update song (use frontend ID directly, generate UUID only if missing)
+    const songId = song.id || generateUUID()
     const songResult = await client.query(`
       INSERT INTO songs (id, title, artist, album, year, genre, reason, question, youtube_video_id, youtube_url, spotify_track_id, spotify_uri, is_favorite, is_eliminated, is_muted, user_notes, ratings, ai_description, promotion_history, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
@@ -490,7 +532,7 @@ api.post('/themes/:themeId/songs', async (req, res) => {
         promotion_history = EXCLUDED.promotion_history
       RETURNING *
     `, [
-      isValidUUID(song.id) ? song.id : generateUUID(),
+      songId,
       song.title,
       song.artist,
       song.album,
@@ -750,14 +792,34 @@ api.get('/sessions/:id', async (req, res) => {
 // Create session
 api.post('/sessions', async (req, res) => {
   try {
-    const { themeId, title, phase } = req.body
+    const { id, themeId, title, phase, iterationCount, finalPickId, playlistCreated, createdAt, updatedAt, conversationHistory } = req.body
     const now = Date.now()
+    const sessionId = id || generateUUID()
 
     const result = await pool.query(`
-      INSERT INTO sessions (theme_id, title, phase, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO sessions (id, theme_id, title, phase, iteration_count, final_pick_id, playlist_created, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (id) DO UPDATE SET
+        theme_id = EXCLUDED.theme_id,
+        title = EXCLUDED.title,
+        phase = EXCLUDED.phase,
+        iteration_count = EXCLUDED.iteration_count,
+        final_pick_id = EXCLUDED.final_pick_id,
+        playlist_created = EXCLUDED.playlist_created,
+        updated_at = EXCLUDED.updated_at
       RETURNING *
-    `, [themeId, title, phase || 'exploring', now, now])
+    `, [sessionId, themeId, title, phase || 'exploring', iterationCount || 0, finalPickId, playlistCreated, createdAt || now, updatedAt || now])
+
+    // Also insert conversation history if provided
+    if (conversationHistory && conversationHistory.length > 0) {
+      for (const msg of conversationHistory) {
+        await pool.query(`
+          INSERT INTO conversation_history (session_id, role, content, timestamp)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT DO NOTHING
+        `, [sessionId, msg.role, msg.content, msg.timestamp || now])
+      }
+    }
 
     const row = result.rows[0]
     res.status(201).json({
@@ -978,7 +1040,8 @@ api.post('/saved-songs', async (req, res) => {
 
     await client.query('BEGIN')
 
-    // Insert or update song
+    // Insert or update song (use frontend ID directly)
+    const songId = song.id || generateUUID()
     const songResult = await client.query(`
       INSERT INTO songs (id, title, artist, album, year, genre, reason, question, youtube_video_id, youtube_url, spotify_track_id, spotify_uri, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -987,7 +1050,7 @@ api.post('/saved-songs', async (req, res) => {
         artist = EXCLUDED.artist
       RETURNING id
     `, [
-      isValidUUID(song.id) ? song.id : generateUUID(),
+      songId,
       song.title, song.artist, song.album, song.year, song.genre,
       song.reason, song.question, song.youtubeVideoId, song.youtubeUrl,
       song.spotifyTrackId, song.spotifyUri, now
@@ -1291,8 +1354,8 @@ api.post('/migrate', async (req, res) => {
     // Migrate themes and songs
     if (themes && themes.length > 0) {
       for (const theme of themes) {
-        // Generate new UUID for theme if needed
-        const newThemeId = isValidUUID(theme.id) ? theme.id : generateUUID()
+        // Use existing theme ID (now supports any format, not just UUID)
+        const newThemeId = theme.id || generateUUID()
 
         // Insert theme (ensure JSONB fields are properly formatted)
         const hallPassesUsed = theme.hallPassesUsed ? JSON.stringify(theme.hallPassesUsed) : '{"semifinals": false, "finals": false}'
@@ -1326,7 +1389,7 @@ api.post('/migrate', async (req, res) => {
         for (const tier of tiers) {
           const songs = theme[tier] || []
           for (const song of songs) {
-            const newSongId = isValidUUID(song.id) ? song.id : generateUUID()
+            const newSongId = song.id || generateUUID()
             songIdMap.set(song.id, newSongId)
 
             // Ensure JSONB fields are properly formatted
@@ -1356,7 +1419,7 @@ api.post('/migrate', async (req, res) => {
         // Migrate pick
         if (theme.pick) {
           const song = theme.pick
-          const newSongId = isValidUUID(song.id) ? song.id : generateUUID()
+          const newSongId = song.id || generateUUID()
           songIdMap.set(song.id, newSongId)
 
           // Ensure JSONB fields are properly formatted
@@ -1413,7 +1476,7 @@ api.post('/migrate', async (req, res) => {
     // Migrate saved songs
     if (songsILike && songsILike.length > 0) {
       for (const song of songsILike) {
-        const newSongId = isValidUUID(song.id) ? song.id : generateUUID()
+        const newSongId = song.id || generateUUID()
 
         await client.query(`
           INSERT INTO songs (id, title, artist, album, year, genre, reason, youtube_video_id, youtube_url, spotify_track_id, spotify_uri, created_at)
