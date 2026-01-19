@@ -554,7 +554,7 @@ api.post('/themes/:themeId/songs', async (req, res) => {
       now
     ])
 
-    const songId = songResult.rows[0].id
+    // songId is already defined above, songResult.rows[0].id should be the same
 
     // Link song to theme with tier
     await client.query(`
@@ -1056,7 +1056,7 @@ api.post('/saved-songs', async (req, res) => {
       song.spotifyTrackId, song.spotifyUri, now
     ])
 
-    const songId = songResult.rows[0].id
+    // songId is already defined above
 
     // Save the song
     await client.query(`
