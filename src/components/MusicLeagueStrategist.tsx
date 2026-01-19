@@ -12,6 +12,8 @@ import {
   PanelRightClose,
   Clock,
   Info,
+  FileDown,
+  FileUp,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -59,6 +61,25 @@ function getYouTubeUrl(song: Song): string {
   return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.title} ${song.artist}`)}`
 }
 
+// Funnel export data structure
+interface FunnelExportData {
+  version: number
+  exportedAt: number
+  theme: {
+    id: string
+    title: string
+    rawTheme: string
+    interpretation?: string
+    strategy?: string
+  }
+  funnel: {
+    pick: Song | null
+    finalists: Song[]
+    semifinalists: Song[]
+    candidates: Song[]
+  }
+}
+
 export function MusicLeagueStrategist(): React.ReactElement {
   const [input, setInput] = useState('')
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false)
@@ -66,7 +87,9 @@ export function MusicLeagueStrategist(): React.ReactElement {
   const [copiedExport, setCopiedExport] = useState(false)
   const [selectedSong, setSelectedSong] = useState<Song | null>(null)
   const [slideoutOpen, setSlideoutOpen] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Store state
   const {
@@ -557,7 +580,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
     addCandidateToTheme(theme.id, song)
   }, [theme, addCandidateToTheme])
 
-  // Export funnel summary
+  // Export funnel summary (copy to clipboard)
   const handleExport = useCallback(() => {
     if (!theme) return
     const summary = exportFunnelSummary(theme.id)
@@ -565,6 +588,81 @@ export function MusicLeagueStrategist(): React.ReactElement {
     setCopiedExport(true)
     setTimeout(() => setCopiedExport(false), 2000)
   }, [theme, exportFunnelSummary])
+
+  // Export funnel data to JSON file
+  const handleFileExport = useCallback(() => {
+    if (!theme) return
+
+    const exportData: FunnelExportData = {
+      version: 1,
+      exportedAt: Date.now(),
+      theme: {
+        id: theme.id,
+        title: theme.title,
+        rawTheme: theme.rawTheme,
+        interpretation: theme.interpretation,
+        strategy: theme.strategy,
+      },
+      funnel: {
+        pick: theme.pick,
+        finalists: theme.finalists ?? [],
+        semifinalists: theme.semifinalists ?? [],
+        candidates: theme.candidates ?? [],
+      },
+    }
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `funnel-${theme.title.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }, [theme])
+
+  // Import funnel data from JSON file
+  const handleFileImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !theme) return
+
+    setImportError(null)
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string) as FunnelExportData
+
+        if (!data.version || !data.funnel) {
+          throw new Error('Invalid funnel export file')
+        }
+
+        updateTheme(theme.id, {
+          pick: data.funnel.pick,
+          finalists: data.funnel.finalists ?? [],
+          semifinalists: data.funnel.semifinalists ?? [],
+          candidates: data.funnel.candidates ?? [],
+          ...(data.theme.interpretation && !theme.interpretation
+            ? { interpretation: data.theme.interpretation }
+            : {}),
+          ...(data.theme.strategy && !theme.strategy
+            ? { strategy: data.theme.strategy }
+            : {}),
+        })
+
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      } catch (err) {
+        setImportError(err instanceof Error ? err.message : 'Failed to import funnel')
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      }
+    }
+    reader.readAsText(file)
+  }, [theme, updateTheme])
 
   // Handle song click to open slideout
   const handleSongClick = useCallback((song: Song) => {
@@ -826,6 +924,31 @@ export function MusicLeagueStrategist(): React.ReactElement {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
+                  onClick={handleFileExport}
+                  title="Export funnel to file"
+                >
+                  <FileDown className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Import funnel from file"
+                >
+                  <FileUp className="h-3 w-3" />
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileImport}
+                  className="hidden"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
                   onClick={handleExport}
                   title="Copy funnel summary"
                 >
@@ -837,6 +960,11 @@ export function MusicLeagueStrategist(): React.ReactElement {
                 </Button>
               </div>
             </div>
+            {importError && (
+              <div className="px-3 py-1 text-xs text-red-500 bg-red-500/10">
+                {importError}
+              </div>
+            )}
             <ScrollArea className="flex-1 p-3">
               <FunnelVisualization theme={theme} compact onSongClick={handleSongClick} />
             </ScrollArea>

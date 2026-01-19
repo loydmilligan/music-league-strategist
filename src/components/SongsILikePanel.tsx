@@ -9,6 +9,7 @@ import {
   Tag,
   Music,
   ExternalLink,
+  Play,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +29,19 @@ import { cn } from '@/lib/utils'
 interface SongsILikePanelProps {
   trigger?: React.ReactNode
   className?: string
+}
+
+// Extract Spotify track ID from URI or URL
+function getSpotifyTrackId(song: SavedSong): string | null {
+  if (song.spotifyTrackId) return song.spotifyTrackId
+  if (song.spotifyUri) {
+    // Handle both open.spotify.com URLs and spotify:track:xxx URIs
+    const urlMatch = song.spotifyUri.match(/spotify\.com\/track\/([a-zA-Z0-9]+)/)
+    if (urlMatch) return urlMatch[1]
+    const uriMatch = song.spotifyUri.match(/spotify:track:([a-zA-Z0-9]+)/)
+    if (uriMatch) return uriMatch[1]
+  }
+  return null
 }
 
 function SongCard({
@@ -61,6 +75,11 @@ function SongCard({
     ? `https://www.youtube.com/watch?v=${song.youtubeVideoId}`
     : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.title} ${song.artist}`)}`
 
+  const spotifyTrackId = getSpotifyTrackId(song)
+  const spotifyUrl = spotifyTrackId
+    ? `https://open.spotify.com/track/${spotifyTrackId}`
+    : null
+
   return (
     <div className="rounded-lg border p-3 space-y-2">
       <div className="flex items-start justify-between gap-2">
@@ -69,11 +88,23 @@ function SongCard({
           <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
         </div>
         <div className="flex items-center gap-1">
+          {spotifyUrl && (
+            <a
+              href={spotifyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
+              title="Play on Spotify"
+            >
+              <Play className="h-3 w-3 text-green-500" />
+            </a>
+          )}
           <a
             href={youtubeUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-accent"
+            title="Play on YouTube"
           >
             <ExternalLink className="h-3 w-3 text-muted-foreground" />
           </a>

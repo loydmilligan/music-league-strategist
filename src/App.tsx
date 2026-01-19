@@ -9,6 +9,7 @@ import { CompetitorAnalysisPanel } from '@/components/CompetitorAnalysisPanel'
 import { HelpModal } from '@/components/HelpModal'
 import { SyncStatusButton } from '@/components/SyncStatusButton'
 import { PlayerPanel } from '@/components/PlayerPanel'
+import { PersistentPlayer } from '@/components/PersistentPlayer'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useServerSync } from '@/hooks/useServerSync'
 
@@ -132,7 +133,7 @@ function App(): React.ReactElement {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
+      <main className="flex-1 overflow-hidden pb-16">
         {!hasApiKey ? (
           <div className="flex h-full items-center justify-center p-8">
             <div className="max-w-md space-y-4 text-center">
@@ -158,6 +159,9 @@ function App(): React.ReactElement {
           <MusicLeagueStrategist />
         )}
       </main>
+
+      {/* Persistent Player Bar */}
+      {hasApiKey && <PersistentPlayer />}
     </div>
   )
 }
