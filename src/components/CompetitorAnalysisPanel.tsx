@@ -14,6 +14,7 @@ import {
   ListMusic,
   Loader2,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -345,19 +346,30 @@ export function CompetitorAnalysisPanel({
                 <span className="text-muted-foreground">
                   {competitorAnalysis.leagueName || 'Music League'}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  Imported {new Date(competitorAnalysis.importedAt).toLocaleDateString()}
-                </span>
+                <CSVImportModal
+                  mergeMode
+                  trigger={
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                      <RefreshCw className="h-3 w-3" />
+                      Update Data
+                    </Button>
+                  }
+                />
               </div>
-              <div className="flex items-center gap-4 mt-2 text-xs">
-                <div className="flex items-center gap-1">
-                  <User className="h-3 w-3" />
-                  {competitorAnalysis.competitors?.length ?? 0} competitors
+              <div className="flex items-center justify-between mt-2 text-xs">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    {competitorAnalysis.competitors?.length ?? 0} competitors
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Music className="h-3 w-3" />
+                    {competitorAnalysis.roundResults?.length ?? 0} rounds
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Music className="h-3 w-3" />
-                  {competitorAnalysis.rounds?.length ?? 0} rounds
-                </div>
+                <span className="text-muted-foreground">
+                  Updated {new Date(competitorAnalysis.importedAt).toLocaleDateString()}
+                </span>
               </div>
             </div>
 

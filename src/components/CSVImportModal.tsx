@@ -23,11 +23,13 @@ import {
 } from '@/components/ui/dialog'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
-import { importMusicLeagueData, validateCSVFiles } from '@/services/csvImport'
+import { importMusicLeagueData, validateCSVFiles, mergeCompetitorAnalysisData } from '@/services/csvImport'
 import { cn } from '@/lib/utils'
 
 interface CSVImportModalProps {
   trigger?: React.ReactNode
+  /** If true, will merge with existing data instead of replacing */
+  mergeMode?: boolean
 }
 
 interface FileState {
@@ -45,12 +47,13 @@ const REQUIRED_FILES = [
 
 type FileKey = typeof REQUIRED_FILES[number]['key']
 
-export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactElement {
+export function CSVImportModal({ trigger, mergeMode = false }: CSVImportModalProps): React.ReactElement {
   const [open, setOpen] = useState(false)
   const [leagueName, setLeagueName] = useState('')
   const [isImporting, setIsImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importSuccess, setImportSuccess] = useState(false)
+  const [mergeStats, setMergeStats] = useState<{ newRounds: number; skipped: number } | null>(null)
 
   const [files, setFiles] = useState<Record<FileKey, FileState>>({
     rounds: { file: null, content: null, error: null },
@@ -59,6 +62,7 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
     votes: { file: null, content: null, error: null },
   })
 
+  const existingData = useMusicLeagueStore((s) => s.competitorAnalysis)
   const setCompetitorAnalysis = useMusicLeagueStore((s) => s.setCompetitorAnalysis)
 
   const handleFileChange = useCallback(async (key: FileKey, file: File | null) => {
@@ -91,6 +95,7 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
 
     setIsImporting(true)
     setImportError(null)
+    setMergeStats(null)
 
     try {
       // Validate CSV files
@@ -107,7 +112,7 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
       }
 
       // Import data
-      const data = importMusicLeagueData(
+      const newData = importMusicLeagueData(
         files.rounds.content!,
         files.submissions.content!,
         files.competitors.content!,
@@ -115,14 +120,23 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
         leagueName || undefined
       )
 
-      setCompetitorAnalysis(data)
+      // If merge mode and we have existing data, merge instead of replace
+      if (mergeMode && existingData) {
+        const { merged, newRoundsAdded, duplicatesSkipped } = mergeCompetitorAnalysisData(existingData, newData)
+        setCompetitorAnalysis(merged)
+        setMergeStats({ newRounds: newRoundsAdded, skipped: duplicatesSkipped })
+      } else {
+        setCompetitorAnalysis(newData)
+      }
+
       setImportSuccess(true)
 
-      // Close after success
+      // Close after success (longer delay if showing merge stats)
       setTimeout(() => {
         setOpen(false)
         // Reset state
         setImportSuccess(false)
+        setMergeStats(null)
         setFiles({
           rounds: { file: null, content: null, error: null },
           submissions: { file: null, content: null, error: null },
@@ -130,13 +144,13 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
           votes: { file: null, content: null, error: null },
         })
         setLeagueName('')
-      }, 1500)
+      }, mergeStats ? 2500 : 1500)
     } catch (err) {
       setImportError(err instanceof Error ? err.message : 'Import failed')
     } finally {
       setIsImporting(false)
     }
-  }, [allFilesLoaded, files, leagueName, setCompetitorAnalysis])
+  }, [allFilesLoaded, files, leagueName, setCompetitorAnalysis, mergeMode, existingData, mergeStats])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -152,10 +166,12 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Import Music League Data
+            {mergeMode ? 'Update Music League Data' : 'Import Music League Data'}
           </DialogTitle>
           <DialogDescription>
-            Upload your Music League CSV exports to analyze competitor performance.
+            {mergeMode
+              ? 'Upload your latest CSV exports. New rounds will be added, existing rounds will be skipped.'
+              : 'Upload your Music League CSV exports to analyze competitor performance.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -231,7 +247,18 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
             <Alert className="border-green-500 bg-green-500/10">
               <Check className="h-4 w-4 text-green-500" />
               <AlertDescription className="text-xs text-green-500">
-                Data imported successfully!
+                {mergeStats ? (
+                  mergeStats.newRounds > 0 ? (
+                    <>
+                      Added {mergeStats.newRounds} new round{mergeStats.newRounds !== 1 ? 's' : ''}.
+                      {mergeStats.skipped > 0 && ` Skipped ${mergeStats.skipped} existing round${mergeStats.skipped !== 1 ? 's' : ''}.`}
+                    </>
+                  ) : (
+                    `No new rounds found. All ${mergeStats.skipped} round${mergeStats.skipped !== 1 ? 's' : ''} already imported.`
+                  )
+                ) : (
+                  'Data imported successfully!'
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -245,17 +272,17 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
             {isImporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Importing...
+                {mergeMode ? 'Updating...' : 'Importing...'}
               </>
             ) : importSuccess ? (
               <>
                 <Check className="mr-2 h-4 w-4" />
-                Imported!
+                {mergeMode ? 'Updated!' : 'Imported!'}
               </>
             ) : (
               <>
                 <Upload className="mr-2 h-4 w-4" />
-                Import Data
+                {mergeMode ? 'Update Data' : 'Import Data'}
               </>
             )}
           </Button>

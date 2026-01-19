@@ -386,3 +386,135 @@ export function getConsistentWinners(
 
   return results.sort((a, b) => b.count - a.count || a.avgRank - b.avgRank)
 }
+
+// Merge new import data with existing data, skipping duplicate rounds
+export function mergeCompetitorAnalysisData(
+  existing: CompetitorAnalysisData,
+  newData: CompetitorAnalysisData
+): { merged: CompetitorAnalysisData; newRoundsAdded: number; duplicatesSkipped: number } {
+  // Find existing round IDs
+  const existingRoundIds = new Set(existing.roundResults.map(r => r.roundId))
+
+  // Filter new rounds to only include ones we don't have
+  const newRounds = newData.roundResults.filter(r => !existingRoundIds.has(r.roundId))
+  const duplicatesSkipped = newData.roundResults.length - newRounds.length
+
+  if (newRounds.length === 0) {
+    // No new data, return existing
+    return {
+      merged: existing,
+      newRoundsAdded: 0,
+      duplicatesSkipped,
+    }
+  }
+
+  // Merge rounds info
+  const existingRoundInfoIds = new Set(existing.rounds.map(r => r.id))
+  const newRoundInfos = newData.rounds.filter(r => !existingRoundInfoIds.has(r.id))
+  const mergedRounds = [...existing.rounds, ...newRoundInfos]
+
+  // Merge round results
+  const mergedRoundResults = [...existing.roundResults, ...newRounds]
+
+  // Rebuild competitor stats from all round results
+  const competitorStats = new Map<string, {
+    totalPoints: number
+    wins: number
+    topThrees: number
+    submissions: CompetitorSubmission[]
+  }>()
+
+  // Initialize from existing competitors
+  for (const competitor of existing.competitors) {
+    competitorStats.set(competitor.id, {
+      totalPoints: 0,
+      wins: 0,
+      topThrees: 0,
+      submissions: [],
+    })
+  }
+
+  // Add any new competitors from the import
+  for (const competitor of newData.competitors) {
+    if (!competitorStats.has(competitor.id)) {
+      competitorStats.set(competitor.id, {
+        totalPoints: 0,
+        wins: 0,
+        topThrees: 0,
+        submissions: [],
+      })
+    }
+  }
+
+  // Recalculate stats from all round results
+  for (const round of mergedRoundResults) {
+    for (const ranking of round.rankings) {
+      const stats = competitorStats.get(ranking.submitterId)
+      if (!stats) continue
+
+      stats.totalPoints += ranking.totalPoints
+      if (ranking.rank === 1) stats.wins++
+      if (ranking.rank <= 3) stats.topThrees++
+
+      stats.submissions.push({
+        spotifyUri: ranking.spotifyUri,
+        title: ranking.title,
+        artist: ranking.artist,
+        submitterId: ranking.submitterId,
+        submitterName: ranking.submitterName,
+        roundId: round.roundId,
+        roundName: round.roundName,
+        pointsReceived: ranking.totalPoints,
+        rank: ranking.rank,
+        comment: ranking.comment,
+      })
+    }
+  }
+
+  // Build merged competitor list with updated names
+  const competitorNames = new Map<string, string>()
+  for (const c of existing.competitors) competitorNames.set(c.id, c.name)
+  for (const c of newData.competitors) competitorNames.set(c.id, c.name)
+
+  const mergedCompetitors: CompetitorProfile[] = []
+  for (const [competitorId, stats] of competitorStats) {
+    const name = competitorNames.get(competitorId) || 'Unknown'
+    const submissionCount = stats.submissions.length
+
+    mergedCompetitors.push({
+      id: competitorId,
+      name,
+      submissions: stats.submissions,
+      totalPoints: stats.totalPoints,
+      averagePoints: submissionCount > 0 ? stats.totalPoints / submissionCount : 0,
+      wins: stats.wins,
+      topThrees: stats.topThrees,
+    })
+  }
+
+  // Sort competitors by total points
+  mergedCompetitors.sort((a, b) => b.totalPoints - a.totalPoints)
+
+  // Sort round results by date (newest first)
+  mergedRoundResults.sort((a, b) => {
+    const aRound = mergedRounds.find(r => r.id === a.roundId)
+    const bRound = mergedRounds.find(r => r.id === b.roundId)
+    if (!aRound || !bRound) return 0
+    return new Date(bRound.createdAt).getTime() - new Date(aRound.createdAt).getTime()
+  })
+
+  return {
+    merged: {
+      rounds: mergedRounds,
+      competitors: mergedCompetitors,
+      roundResults: mergedRoundResults,
+      importedAt: Date.now(),
+      leagueName: existing.leagueName || newData.leagueName,
+      // Preserve existing playlist info
+      recommendationPlaylistId: existing.recommendationPlaylistId,
+      recommendationPlaylistUrl: existing.recommendationPlaylistUrl,
+    },
+    newRoundsAdded: newRounds.length,
+    duplicatesSkipped,
+  }
+}
