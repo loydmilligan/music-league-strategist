@@ -1,0 +1,580 @@
+{
+  "manifest": {
+    "version": "1.0.0",
+    "generatedAt": "2026-01-19T00:00:00Z",
+    "description": "Music League Strategist codebase manifest - comprehensive file metadata for AI-assisted development",
+    "totalFiles": 72,
+    "lastUpdatedBy": "Claude Opus 4.5"
+  },
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "date": "2026-01-19",
+      "changes": [
+        "Initial manifest generation",
+        "Analyzed 72 source files across stores, services, components, API, and config",
+        "Documented all exports, dependencies, and integrations"
+      ]
+    }
+  ],
+  "categories": {
+    "stores": {
+      "description": "Zustand state management stores with localStorage persistence",
+      "files": [
+        {
+          "name": "musicLeagueStore.ts",
+          "path": "src/stores/musicLeagueStore.ts",
+          "type": "code",
+          "category": "store",
+          "language": "typescript",
+          "description": "Main application state store managing themes, sessions, songs across a 4-tier funnel system (pick->finalists->semifinalists->candidates), user profiles, preferences, and competitor analysis",
+          "exports": ["useMusicLeagueStore", "formatCandidatesForPrompt", "formatRejectedSongsForPrompt", "formatSessionPreferencesForPrompt", "formatLongTermPreferencesForPrompt", "formatFinalistsForPrompt", "formatFunnelForPrompt", "getConversationPrompt", "getConversationPromptWithTheme", "getFinalistsPrompt", "getLongTermPreferencePrompt"],
+          "dependencies": ["zustand", "zustand/middleware", "@/types/musicLeague"],
+          "state": {
+            "description": "Manages multi-theme funnel system, sessions, user profile, Songs I Like collection, competitor analysis",
+            "keyProperties": ["themes", "activeThemeId", "sessions", "activeSessionId", "userProfile", "songsILike", "competitorAnalysis"]
+          },
+          "isActivelyUsed": true,
+          "notes": "Core store with complex tier management. Tracks song promotion history. Supports server sync with normalization."
+        },
+        {
+          "name": "settingsStore.ts",
+          "path": "src/stores/settingsStore.ts",
+          "type": "code",
+          "category": "store",
+          "language": "typescript",
+          "description": "Settings store managing API keys and service configurations (OpenRouter, Spotify, YouTube Music, ntfy notifications) with localStorage persistence and env variable defaults",
+          "exports": ["useSettingsStore", "isOpenRouterConfigured", "isSpotifyConfigured", "isYouTubeMusicConfigured", "isNtfyConfigured"],
+          "dependencies": ["zustand", "zustand/middleware"],
+          "state": {
+            "description": "API keys and service configurations with env fallbacks",
+            "keyProperties": ["openRouterKey", "defaultModel", "spotify", "youtubeMusic", "ntfy"]
+          },
+          "integrations": ["OpenRouter", "Spotify OAuth", "YouTube Music OAuth", "ntfy"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "modelsStore.ts",
+          "path": "src/stores/modelsStore.ts",
+          "type": "code",
+          "category": "store",
+          "language": "typescript",
+          "description": "AI model registry store managing user's list of OpenRouter models with nicknames, favorites, cost tiers, and sorting. Seeds with default models on first load.",
+          "exports": ["useModelsStore", "areModelsInitialized"],
+          "dependencies": ["zustand", "zustand/middleware", "@/types/models"],
+          "state": {
+            "description": "User's AI model registry with nicknames and preferences",
+            "keyProperties": ["models", "initialized"]
+          },
+          "integrations": ["OpenRouter"],
+          "isActivelyUsed": true,
+          "notes": "Seeds 6 default models on first load: Claude Sonnet 4, Claude 3.5 Sonnet, GPT-4o, Gemini 2.0 Flash, Claude 3 Haiku, DeepSeek V3"
+        }
+      ]
+    },
+    "types": {
+      "description": "TypeScript type definitions and interfaces",
+      "files": [
+        {
+          "name": "musicLeague.ts",
+          "path": "src/types/musicLeague.ts",
+          "type": "code",
+          "category": "type",
+          "language": "typescript",
+          "description": "Core type definitions for the entire Music League Strategist domain: songs, themes, sessions, funnel system, AI responses, user profiles, competitor analysis, and system prompts",
+          "exports": ["MusicLeaguePhase", "ThemePhase", "FunnelTier", "PHASE_THRESHOLDS", "FUNNEL_TIER_LIMITS", "Song", "RejectedSong", "SessionPreference", "LongTermPreference", "ThemeContext", "MusicLeagueTheme", "MusicLeagueSession", "MusicLeagueUserProfile", "AIConversationResponse", "AIFinalistsResponse", "TierAction", "MUSIC_LEAGUE_PROMPTS", "SavedSong", "CompetitorAnalysisData", "CompetitorProfile", "RoundResults", "HallPassesUsed"],
+          "interfaces": [
+            {"name": "Song", "description": "A song with metadata, Spotify/YouTube links, AI reasoning, user ratings, and funnel position"},
+            {"name": "MusicLeagueTheme", "description": "A Music League round with 4-tier funnel (pick/finalists/semifinalists/candidates)"},
+            {"name": "MusicLeagueSession", "description": "A brainstorming session linked to a theme with working candidates and conversation history"},
+            {"name": "AIConversationResponse", "description": "Structured AI response with candidates, message, extracted preferences, tier actions"}
+          ],
+          "isActivelyUsed": true,
+          "notes": "Contains massive AI system prompts (MUSIC_LEAGUE_PROMPTS). Defines tier limits (30/8/4/1). Special AI actions: create_playlist, enter_finalists, finalize_pick, save_to_liked."
+        },
+        {
+          "name": "chat.ts",
+          "path": "src/types/chat.ts",
+          "type": "code",
+          "category": "type",
+          "language": "typescript",
+          "description": "OpenRouter chat API types for messages, requests, streaming chunks, and reasoning support",
+          "exports": ["ChatMessage", "ChatCompletionRequest", "ChatCompletionChunk", "StreamChunk"],
+          "integrations": ["OpenRouter"],
+          "isActivelyUsed": true,
+          "notes": "StreamChunk supports reasoning models (o1, DeepSeek, GLM-4) with separate reasoning/content streams."
+        },
+        {
+          "name": "models.ts",
+          "path": "src/types/models.ts",
+          "type": "code",
+          "category": "type",
+          "language": "typescript",
+          "description": "AI model metadata types with cost tiers, provider extraction, and OpenRouter API response shapes",
+          "exports": ["ModelType", "CostTier", "ModelProvider", "AIModel", "CreateAIModelInput", "UpdateAIModelInput", "OpenRouterModelInfo", "getModelProvider", "getCostTier", "generateModelId"],
+          "isActivelyUsed": true,
+          "notes": "Cost tier calculation: $ = <$1/M tokens, $$ = $1-10/M, $$$ = >$10/M"
+        }
+      ]
+    },
+    "services": {
+      "description": "External API integrations and business logic services",
+      "files": [
+        {
+          "name": "api.ts",
+          "path": "src/services/api.ts",
+          "type": "code",
+          "category": "service",
+          "language": "typescript",
+          "description": "API client for PostgreSQL backend. Handles all CRUD operations for themes, sessions, songs, user profile, saved songs, competitor analysis, settings, and migration.",
+          "exports": ["api", "ApiError", "ApiSettings", "ApiAIModel", "ApiChatMessage"],
+          "apiEndpoints": ["/api/ml/themes", "/api/ml/sessions", "/api/ml/profile", "/api/ml/saved-songs", "/api/ml/competitor-analysis", "/api/ml/settings", "/api/ml/migrate", "/api/ml/health"],
+          "isActivelyUsed": true,
+          "notes": "All endpoints use /api/ml base path. Used by useServerSync hook for data persistence."
+        },
+        {
+          "name": "openrouter.ts",
+          "path": "src/services/openrouter.ts",
+          "type": "code",
+          "category": "service",
+          "language": "typescript",
+          "description": "OpenRouter API service for AI chat completions with streaming support and reasoning model handling",
+          "exports": ["OpenRouterService", "openRouterService"],
+          "apiEndpoints": ["https://openrouter.ai/api/v1/chat/completions", "https://openrouter.ai/api/v1/models"],
+          "integrations": ["OpenRouter"],
+          "isActivelyUsed": true,
+          "notes": "Singleton service. Handles SSE streaming with manual buffer parsing."
+        },
+        {
+          "name": "spotify.ts",
+          "path": "src/services/spotify.ts",
+          "type": "code",
+          "category": "service",
+          "language": "typescript",
+          "description": "Spotify API service for OAuth token refresh, track search, playlist CRUD, and cross-platform link resolution via Songlink API. Supports smart playlist syncing.",
+          "exports": ["spotifyService"],
+          "apiEndpoints": ["https://accounts.spotify.com/api/token", "https://api.spotify.com/v1/search", "https://api.spotify.com/v1/me", "https://api.spotify.com/v1/playlists", "/api/songlink/v1-alpha.1/links"],
+          "integrations": ["Spotify OAuth", "Songlink/Odesli"],
+          "isActivelyUsed": true,
+          "notes": "Token auto-refresh with 60s buffer. Songlink proxied through nginx to avoid CORS."
+        },
+        {
+          "name": "youtubeMusic.ts",
+          "path": "src/services/youtubeMusic.ts",
+          "type": "code",
+          "category": "service",
+          "language": "typescript",
+          "description": "YouTube Music API service for OAuth token refresh, video search, and playlist creation using YouTube Data API v3",
+          "exports": ["youtubeMusicService"],
+          "apiEndpoints": ["https://oauth2.googleapis.com/token", "https://www.googleapis.com/youtube/v3/search", "https://www.googleapis.com/youtube/v3/playlists"],
+          "integrations": ["YouTube Data API v3", "Google OAuth"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "csvImport.ts",
+          "path": "src/services/csvImport.ts",
+          "type": "code",
+          "category": "service",
+          "language": "typescript",
+          "description": "Music League CSV import parser. Processes 4 CSV files (rounds, submissions, competitors, votes) to build competitor profiles, round rankings, and analytics.",
+          "exports": ["importMusicLeagueData", "validateCSVFiles", "getTopSongsForRound", "getCompetitorHistory", "getConsistentWinners"],
+          "isActivelyUsed": true,
+          "notes": "Custom CSV parser handles quoted commas and escaped quotes."
+        },
+        {
+          "name": "ntfy.ts",
+          "path": "src/services/ntfy.ts",
+          "type": "code",
+          "category": "service",
+          "language": "typescript",
+          "description": "ntfy push notification service for deadline reminders and phase milestones.",
+          "exports": ["ntfyService", "NtfyPriority", "NtfyNotification"],
+          "integrations": ["ntfy.sh"],
+          "isActivelyUsed": true,
+          "notes": "Priority escalation based on hours remaining."
+        }
+      ]
+    },
+    "hooks": {
+      "description": "React custom hooks",
+      "files": [
+        {
+          "name": "useServerSync.ts",
+          "path": "src/hooks/useServerSync.ts",
+          "type": "code",
+          "category": "hook",
+          "language": "typescript",
+          "description": "React hook for PostgreSQL server synchronization. Handles initial load, localStorage migration detection, and provides helper hooks for syncing individual entities.",
+          "exports": ["useServerSync", "useThemeSync", "useSettingsSync"],
+          "isActivelyUsed": true,
+          "notes": "Uses useRef to prevent double-initialization. Normalizes arrays on server data load."
+        }
+      ]
+    },
+    "components": {
+      "description": "React UI components (main application components)",
+      "files": [
+        {
+          "name": "MusicLeagueStrategist.tsx",
+          "path": "src/components/MusicLeagueStrategist.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Main application component that combines chat interface, funnel visualization, song details, and all panels into the primary UI",
+          "exports": ["MusicLeagueStrategist"],
+          "features": ["AI chat interface with message history", "Command palette for quick actions", "Send/receive messages with AI", "Parse and process AI song suggestions", "Auto-enrich songs with Spotify/YouTube data", "Manage multiple themes and sessions"],
+          "isActivelyUsed": true,
+          "notes": "Core component that orchestrates the entire application."
+        },
+        {
+          "name": "FunnelVisualization.tsx",
+          "path": "src/components/FunnelVisualization.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "4-tier funnel visualization showing candidates -> semifinalists -> finalists -> pick with drag-and-drop, song cards, and tier management",
+          "exports": ["FunnelVisualization"],
+          "features": ["Four-tier funnel display", "Drag-and-drop song reordering", "Promote/demote buttons", "Search/filter within each tier"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "SongDetailSlideout.tsx",
+          "path": "src/components/SongDetailSlideout.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Slideout panel showing detailed song information including embedded Spotify/YouTube players, metadata, and tier management actions",
+          "exports": ["SongDetailSlideout"],
+          "features": ["Embedded Spotify player iframe", "Embedded YouTube player iframe", "Toggle between players", "Song metadata display", "Promote/demote actions"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "ThemeSelector.tsx",
+          "path": "src/components/ThemeSelector.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Dropdown selector for managing themes with create, select, and delete operations",
+          "exports": ["ThemeSelector"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "SessionManager.tsx",
+          "path": "src/components/SessionManager.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Tabbed interface for managing chat sessions within a theme, with create, switch, and delete operations",
+          "exports": ["SessionManager"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "PlaylistSyncPanel.tsx",
+          "path": "src/components/PlaylistSyncPanel.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Panel for syncing songs between the app and Spotify/YouTube playlists with bi-directional sync capabilities",
+          "exports": ["PlaylistSyncPanel"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "SettingsModal.tsx",
+          "path": "src/components/SettingsModal.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Modal dialog for configuring API keys, OAuth credentials, and app settings",
+          "exports": ["SettingsModal"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "ModelsManager.tsx",
+          "path": "src/components/ModelsManager.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Dropdown selector for choosing the AI model to use for chat interactions",
+          "exports": ["ModelsManager"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "CompetitorAnalysisPanel.tsx",
+          "path": "src/components/CompetitorAnalysisPanel.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Panel for viewing imported competitor data and round analysis from Music League CSV exports",
+          "exports": ["CompetitorAnalysisPanel"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "SongsILikePanel.tsx",
+          "path": "src/components/SongsILikePanel.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Panel for managing a personal library of favorite songs that can be referenced for AI suggestions",
+          "exports": ["SongsILikePanel"],
+          "features": ["Add songs via Spotify URL or manual entry", "Bulk delete", "Search/filter", "Referenced by @songs-i-like AI command"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "CSVImportModal.tsx",
+          "path": "src/components/CSVImportModal.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Modal for importing competitor data from CSV files exported from Music League",
+          "exports": ["CSVImportModal"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "DeadlineIndicator.tsx",
+          "path": "src/components/DeadlineIndicator.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Visual indicator showing time remaining until submission and voting deadlines with color-coded urgency",
+          "exports": ["DeadlineIndicator"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "PhaseProgressBar.tsx",
+          "path": "src/components/PhaseProgressBar.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Visual progress indicator showing the current phase of the Music League round (submission, voting, results)",
+          "exports": ["PhaseProgressBar"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "HelpModal.tsx",
+          "path": "src/components/HelpModal.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Modal displaying comprehensive help documentation, keyboard shortcuts, and feature explanations",
+          "exports": ["HelpModal"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "YouTubePopoutModal.tsx",
+          "path": "src/components/YouTubePopoutModal.tsx",
+          "type": "code",
+          "category": "component",
+          "language": "typescript-react",
+          "description": "Modal with embedded YouTube player for playing songs in a larger popout window",
+          "exports": ["YouTubePopoutModal"],
+          "isActivelyUsed": true
+        }
+      ]
+    },
+    "ui-primitives": {
+      "description": "shadcn/ui primitive components based on Radix UI",
+      "source": "shadcn/ui",
+      "files": [
+        {"name": "alert-dialog.tsx", "path": "src/components/ui/alert-dialog.tsx", "exports": ["AlertDialog", "AlertDialogPortal", "AlertDialogOverlay", "AlertDialogTrigger", "AlertDialogContent", "AlertDialogHeader", "AlertDialogFooter", "AlertDialogTitle", "AlertDialogDescription", "AlertDialogAction", "AlertDialogCancel"]},
+        {"name": "alert.tsx", "path": "src/components/ui/alert.tsx", "exports": ["Alert", "AlertTitle", "AlertDescription"], "variants": ["default", "destructive"]},
+        {"name": "badge.tsx", "path": "src/components/ui/badge.tsx", "exports": ["Badge", "badgeVariants"], "variants": ["default", "secondary", "destructive", "outline"]},
+        {"name": "button.tsx", "path": "src/components/ui/button.tsx", "exports": ["Button", "buttonVariants"], "variants": ["default", "destructive", "outline", "secondary", "ghost", "link"], "sizes": ["default", "sm", "lg", "icon"]},
+        {"name": "card.tsx", "path": "src/components/ui/card.tsx", "exports": ["Card", "CardHeader", "CardFooter", "CardTitle", "CardDescription", "CardContent"]},
+        {"name": "collapsible.tsx", "path": "src/components/ui/collapsible.tsx", "exports": ["Collapsible", "CollapsibleTrigger", "CollapsibleContent"]},
+        {"name": "dialog.tsx", "path": "src/components/ui/dialog.tsx", "exports": ["Dialog", "DialogPortal", "DialogOverlay", "DialogTrigger", "DialogClose", "DialogContent", "DialogHeader", "DialogFooter", "DialogTitle", "DialogDescription"]},
+        {"name": "dropdown-menu.tsx", "path": "src/components/ui/dropdown-menu.tsx", "exports": ["DropdownMenu", "DropdownMenuTrigger", "DropdownMenuContent", "DropdownMenuItem", "DropdownMenuCheckboxItem", "DropdownMenuRadioItem", "DropdownMenuLabel", "DropdownMenuSeparator", "DropdownMenuShortcut", "DropdownMenuGroup", "DropdownMenuPortal", "DropdownMenuSub", "DropdownMenuSubContent", "DropdownMenuSubTrigger", "DropdownMenuRadioGroup"]},
+        {"name": "input.tsx", "path": "src/components/ui/input.tsx", "exports": ["Input"]},
+        {"name": "label.tsx", "path": "src/components/ui/label.tsx", "exports": ["Label"]},
+        {"name": "popover.tsx", "path": "src/components/ui/popover.tsx", "exports": ["Popover", "PopoverTrigger", "PopoverContent", "PopoverAnchor"]},
+        {"name": "scroll-area.tsx", "path": "src/components/ui/scroll-area.tsx", "exports": ["ScrollArea", "ScrollBar"]},
+        {"name": "select.tsx", "path": "src/components/ui/select.tsx", "exports": ["Select", "SelectGroup", "SelectValue", "SelectTrigger", "SelectContent", "SelectLabel", "SelectItem", "SelectSeparator", "SelectScrollUpButton", "SelectScrollDownButton"]},
+        {"name": "separator.tsx", "path": "src/components/ui/separator.tsx", "exports": ["Separator"]},
+        {"name": "sheet.tsx", "path": "src/components/ui/sheet.tsx", "exports": ["Sheet", "SheetPortal", "SheetOverlay", "SheetTrigger", "SheetClose", "SheetContent", "SheetHeader", "SheetFooter", "SheetTitle", "SheetDescription"], "variants": ["top", "bottom", "left", "right"]},
+        {"name": "slider.tsx", "path": "src/components/ui/slider.tsx", "exports": ["Slider"]},
+        {"name": "switch.tsx", "path": "src/components/ui/switch.tsx", "exports": ["Switch"]},
+        {"name": "tabs.tsx", "path": "src/components/ui/tabs.tsx", "exports": ["Tabs", "TabsList", "TabsTrigger", "TabsContent"]},
+        {"name": "textarea.tsx", "path": "src/components/ui/textarea.tsx", "exports": ["Textarea"]},
+        {"name": "tooltip.tsx", "path": "src/components/ui/tooltip.tsx", "exports": ["Tooltip", "TooltipTrigger", "TooltipContent", "TooltipProvider"]}
+      ]
+    },
+    "api": {
+      "description": "Express.js backend API with PostgreSQL database",
+      "files": [
+        {
+          "name": "index.js",
+          "path": "api/src/index.js",
+          "type": "code",
+          "category": "api",
+          "language": "javascript",
+          "description": "Express.js REST API server that provides backend for Music League Strategist with PostgreSQL database integration",
+          "endpoints": [
+            {"method": "GET", "path": "/health", "description": "Health check endpoint"},
+            {"method": "GET", "path": "/themes", "description": "Get all themes with songs"},
+            {"method": "POST", "path": "/themes", "description": "Create new theme"},
+            {"method": "PUT", "path": "/themes/:id", "description": "Update theme"},
+            {"method": "DELETE", "path": "/themes/:id", "description": "Delete theme"},
+            {"method": "POST", "path": "/themes/:themeId/songs", "description": "Add song to theme"},
+            {"method": "PUT", "path": "/themes/:themeId/songs/:songId", "description": "Update song in theme"},
+            {"method": "DELETE", "path": "/themes/:themeId/songs/:songId", "description": "Remove song from theme"},
+            {"method": "GET", "path": "/sessions", "description": "Get all sessions"},
+            {"method": "POST", "path": "/sessions", "description": "Create session"},
+            {"method": "PUT", "path": "/sessions/:id", "description": "Update session"},
+            {"method": "DELETE", "path": "/sessions/:id", "description": "Delete session"},
+            {"method": "POST", "path": "/sessions/:id/messages", "description": "Add message to conversation"},
+            {"method": "GET", "path": "/profile", "description": "Get user profile"},
+            {"method": "PUT", "path": "/profile", "description": "Update user profile"},
+            {"method": "GET", "path": "/saved-songs", "description": "Get saved songs"},
+            {"method": "POST", "path": "/saved-songs", "description": "Save a song"},
+            {"method": "DELETE", "path": "/saved-songs/:songId", "description": "Remove saved song"},
+            {"method": "GET", "path": "/settings", "description": "Get settings"},
+            {"method": "PUT", "path": "/settings", "description": "Update settings"},
+            {"method": "PATCH", "path": "/settings", "description": "Partial settings update"},
+            {"method": "POST", "path": "/migrate", "description": "Migrate localStorage to server"},
+            {"method": "GET", "path": "/has-data", "description": "Check if database has data"}
+          ],
+          "ports": ["3001"],
+          "envVars": ["PORT", "DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASSWORD"],
+          "isActivelyUsed": true,
+          "notes": "Auto-initializes PostgreSQL schema on startup. Port defaults to 3001."
+        }
+      ]
+    },
+    "deployment": {
+      "description": "Docker and CI/CD configuration",
+      "files": [
+        {
+          "name": "docker-compose.yml",
+          "path": "docker-compose.yml",
+          "type": "deployment",
+          "category": "docker",
+          "language": "yaml",
+          "description": "Orchestrates 3-service stack: PostgreSQL, Node API, and Nginx frontend",
+          "services": ["postgres", "api", "app"],
+          "ports": ["3847"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "Dockerfile (API)",
+          "path": "api/Dockerfile",
+          "type": "deployment",
+          "category": "docker",
+          "language": "dockerfile",
+          "description": "Multi-stage Docker build for API service using Node 20 Alpine",
+          "ports": ["3001"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "Dockerfile (Frontend)",
+          "path": "docker/Dockerfile",
+          "type": "deployment",
+          "category": "docker",
+          "language": "dockerfile",
+          "description": "Production Nginx container serving pre-built Vite app",
+          "ports": ["80"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "deploy.yml",
+          "path": ".github/workflows/deploy.yml",
+          "type": "deployment",
+          "category": "ci/cd",
+          "language": "yaml",
+          "description": "GitHub Actions workflow for deploying to Raspberry Pi via self-hosted runner",
+          "buildCommands": ["npm ci", "npm run build"],
+          "isActivelyUsed": true,
+          "notes": "Triggers on main branch push. Copies to /home/dietpi/music-league-strategist."
+        }
+      ]
+    },
+    "config": {
+      "description": "Build and tooling configuration files",
+      "files": [
+        {"name": "vite.config.ts", "path": "vite.config.ts", "description": "Vite build configuration with React plugin and path aliasing", "isActivelyUsed": true},
+        {"name": "tailwind.config.js", "path": "tailwind.config.js", "description": "Tailwind CSS configuration with shadcn/ui design tokens and dark mode", "isActivelyUsed": true},
+        {"name": "tsconfig.json", "path": "tsconfig.json", "description": "TypeScript root config with project references", "isActivelyUsed": true},
+        {"name": "tsconfig.app.json", "path": "tsconfig.app.json", "description": "TypeScript config for React app code", "isActivelyUsed": true},
+        {"name": "tsconfig.node.json", "path": "tsconfig.node.json", "description": "TypeScript config for Node.js build tooling", "isActivelyUsed": true},
+        {"name": "package.json", "path": "package.json", "description": "Frontend package configuration with React 19, Vite, Zustand", "isActivelyUsed": true},
+        {"name": "api/package.json", "path": "api/package.json", "description": "API package configuration with ES modules enabled", "isActivelyUsed": true},
+        {"name": "postcss.config.js", "path": "postcss.config.js", "description": "PostCSS configuration for Tailwind CSS and Autoprefixer", "isActivelyUsed": true},
+        {"name": "eslint.config.js", "path": "eslint.config.js", "description": "ESLint flat config with TypeScript and React rules", "isActivelyUsed": true},
+        {"name": "components.json", "path": "components.json", "description": "shadcn/ui CLI configuration for component generation", "isActivelyUsed": true}
+      ]
+    },
+    "entry": {
+      "description": "Application entry points",
+      "files": [
+        {
+          "name": "App.tsx",
+          "path": "src/App.tsx",
+          "type": "code",
+          "category": "entry",
+          "language": "typescript-react",
+          "description": "Root React component handling server sync, migration UI, and main app layout",
+          "exports": ["App"],
+          "isActivelyUsed": true,
+          "notes": "Manages 3 states: loading, migration needed, main app."
+        },
+        {
+          "name": "main.tsx",
+          "path": "src/main.tsx",
+          "type": "code",
+          "category": "entry",
+          "language": "typescript-react",
+          "description": "React entry point with StrictMode",
+          "isActivelyUsed": true
+        },
+        {
+          "name": "utils.ts",
+          "path": "src/lib/utils.ts",
+          "type": "code",
+          "category": "utility",
+          "language": "typescript",
+          "description": "Utility function for merging Tailwind classes with proper precedence",
+          "exports": ["cn"],
+          "isActivelyUsed": true
+        },
+        {
+          "name": "index.css",
+          "path": "src/index.css",
+          "type": "styling",
+          "category": "styling",
+          "language": "css",
+          "description": "Global styles with Tailwind directives, CSS variables for theming, and custom scrollbar styles",
+          "isActivelyUsed": true
+        }
+      ]
+    },
+    "documentation": {
+      "description": "Project documentation files",
+      "files": [
+        {
+          "name": "README.md",
+          "path": "README.md",
+          "type": "documentation",
+          "category": "readme",
+          "description": "Main project README covering features, installation, deployment, and API configuration",
+          "sections": ["Features", "Quick Start", "Configuration", "Production Deployment", "API Configuration", "Self-Hosted Runner Setup", "Tech Stack", "Project Structure"],
+          "isCurrentWithCode": true
+        },
+        {
+          "name": "feature-plan.md",
+          "path": "docs/feature-plan.md",
+          "type": "documentation",
+          "category": "feature-planning",
+          "description": "Implementation plan for 8 major features including AI commands, deadline tracking, and competitor analysis",
+          "isCurrentWithCode": false,
+          "notes": "Historical planning document - most features now implemented"
+        },
+        {
+          "name": "gemini-research-openrouter-models.md",
+          "path": "docs/gemini-research-openrouter-models.md",
+          "type": "documentation",
+          "category": "research",
+          "description": "Research analysis of OpenRouter AI model providers for music recommendation use cases",
+          "isCurrentWithCode": true
+        }
+      ]
+    }
+  }
+}

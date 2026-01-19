@@ -133,3 +133,60 @@ Settings can also be configured via the Settings modal (gear icon) and are store
 - **Path**: /home/dietpi/music-league-strategist
 - **Port**: 3000 (via Docker)
 - **CI/CD**: GitHub Actions with self-hosted runner
+
+## Codebase Manifest
+
+The project includes a machine-readable manifest at `codebase_manifest.json` that documents all source files with metadata useful for AI-assisted development. This enables efficient context usage when integrating new features.
+
+### Manifest Structure
+
+```
+codebase_manifest.json
+├── manifest          # Version info and metadata
+├── changelog         # Version history with changes
+└── categories        # Files organized by type
+    ├── stores        # Zustand state stores
+    ├── types         # TypeScript types/interfaces
+    ├── services      # External API integrations
+    ├── hooks         # React custom hooks
+    ├── components    # Main UI components
+    ├── ui-primitives # shadcn/ui components
+    ├── api           # Express.js backend
+    ├── deployment    # Docker/CI-CD configs
+    ├── config        # Build/tooling configs
+    ├── entry         # Application entry points
+    └── documentation # Project docs
+```
+
+### Updating the Manifest
+
+**When to update:**
+- After adding new files
+- After significant changes to existing file exports/interfaces
+- After adding new API endpoints
+- After changing file purposes or dependencies
+
+**Update workflow:**
+
+1. Bump the version in `manifest.version` (semver: major.minor.patch)
+2. Add a changelog entry with date and changes
+3. Update the affected file entries in `categories`
+4. Update `manifest.generatedAt` timestamp
+
+**Quick update for single file:**
+```json
+{
+  "name": "newfile.ts",
+  "path": "src/services/newfile.ts",
+  "type": "code",
+  "category": "service",
+  "language": "typescript",
+  "description": "Brief description of what this file does",
+  "exports": ["exportedFunction", "ExportedClass"],
+  "dependencies": ["key-deps"],
+  "isActivelyUsed": true
+}
+```
+
+**AI-assisted full regeneration:**
+Use code-explorer agents to analyze changed files and regenerate their metadata. Reference the existing manifest format for consistency.
