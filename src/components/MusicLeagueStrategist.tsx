@@ -60,6 +60,7 @@ function getYouTubeUrl(song: Song): string {
 }
 
 export function MusicLeagueStrategist(): React.ReactElement {
+  console.log('[MusicLeagueStrategist] render start')
   const [input, setInput] = useState('')
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false)
   const [showFunnel, setShowFunnel] = useState(true)
@@ -105,6 +106,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
     updateTheme,
     addToSongsILike,
   } = useMusicLeagueStore()
+  console.log('[MusicLeagueStrategist] store loaded')
 
   // Settings
   const openRouterKey = useSettingsStore((s) => s.openRouterKey)
