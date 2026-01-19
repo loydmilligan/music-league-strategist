@@ -11,6 +11,9 @@ import {
   ChevronDown,
   ChevronUp,
   Trash2,
+  ListMusic,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -35,7 +38,8 @@ import {
 } from '@/components/ui/tabs'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import { CSVImportModal } from './CSVImportModal'
-import type { CompetitorProfile, RoundResults } from '@/types/musicLeague'
+import { spotifyService } from '@/services/spotify'
+import type { CompetitorProfile, RoundResults, Song } from '@/types/musicLeague'
 import { cn } from '@/lib/utils'
 
 interface CompetitorAnalysisPanelProps {
@@ -226,10 +230,64 @@ export function CompetitorAnalysisPanel({
   className,
 }: CompetitorAnalysisPanelProps): React.ReactElement {
   const [open, setOpen] = useState(false)
+  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false)
+  const [playlistError, setPlaylistError] = useState<string | null>(null)
 
-  const { competitorAnalysis, clearCompetitorAnalysis } = useMusicLeagueStore()
+  const { competitorAnalysis, clearCompetitorAnalysis, setRecommendationPlaylist } = useMusicLeagueStore()
 
   const hasData = competitorAnalysis !== null
+  const hasPlaylist = !!competitorAnalysis?.recommendationPlaylistUrl
+
+  // Get top 3 songs from all rounds
+  const getTop3Songs = (): Song[] => {
+    if (!competitorAnalysis?.roundResults) return []
+
+    const songs: Song[] = []
+    for (const round of competitorAnalysis.roundResults) {
+      const top3 = (round.rankings || []).filter((r) => r.rank <= 3)
+      for (const ranking of top3) {
+        songs.push({
+          id: `${round.roundId}-${ranking.spotifyUri}`,
+          title: ranking.title,
+          artist: ranking.artist,
+          spotifyUri: ranking.spotifyUri,
+          reason: `#${ranking.rank} in "${round.roundName}" with ${ranking.totalPoints} points`,
+        })
+      }
+    }
+    return songs
+  }
+
+  const handleCreatePlaylist = async (): Promise<void> => {
+    if (!competitorAnalysis) return
+
+    setIsCreatingPlaylist(true)
+    setPlaylistError(null)
+
+    try {
+      const songs = getTop3Songs()
+      if (songs.length === 0) {
+        throw new Error('No songs found in rounds')
+      }
+
+      const leagueName = competitorAnalysis.leagueName || 'Music League'
+      const title = `${leagueName} - Top Songs`
+      const description = `Top 3 songs from ${competitorAnalysis.roundResults?.length || 0} rounds. Created by Music League Strategist.`
+
+      const { playlistId, playlistUrl } = await spotifyService.createPlaylist(
+        title,
+        description,
+        songs
+      )
+
+      setRecommendationPlaylist(playlistId, playlistUrl)
+    } catch (error) {
+      console.error('Failed to create playlist:', error)
+      setPlaylistError(error instanceof Error ? error.message : 'Failed to create playlist')
+    } finally {
+      setIsCreatingPlaylist(false)
+    }
+  }
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -301,6 +359,55 @@ export function CompetitorAnalysisPanel({
                   {competitorAnalysis.rounds?.length ?? 0} rounds
                 </div>
               </div>
+            </div>
+
+            {/* Recommendation Playlist Section */}
+            <div className="px-4 py-3 border-b">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ListMusic className="h-4 w-4 text-green-500" />
+                  <span className="text-sm font-medium">Recommendation Playlist</span>
+                </div>
+                {hasPlaylist ? (
+                  <a
+                    href={competitorAnalysis.recommendationPlaylistUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-green-500 hover:text-green-400"
+                  >
+                    Open in Spotify
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 min-h-[44px] text-xs"
+                    onClick={handleCreatePlaylist}
+                    disabled={isCreatingPlaylist}
+                  >
+                    {isCreatingPlaylist ? (
+                      <>
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <ListMusic className="h-3 w-3" />
+                        Create Playlist
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {hasPlaylist
+                  ? `${getTop3Songs().length} songs from top 3 of each round`
+                  : `Create a Spotify playlist with top 3 songs from all ${competitorAnalysis.roundResults?.length ?? 0} rounds`}
+              </p>
+              {playlistError && (
+                <p className="text-xs text-red-500 mt-1">{playlistError}</p>
+              )}
             </div>
 
             <Tabs defaultValue="leaderboard" className="flex-1 flex flex-col">

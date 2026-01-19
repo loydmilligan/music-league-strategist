@@ -178,6 +178,7 @@ interface MusicLeagueState {
   // === Competitor Analysis (Feature 7 & 8) ===
   setCompetitorAnalysis: (data: CompetitorAnalysisData | null) => void
   clearCompetitorAnalysis: () => void
+  setRecommendationPlaylist: (playlistId: string, playlistUrl: string) => void
 
   // === Server Sync (PostgreSQL persistence) ===
   setThemesFromServer: (themes: MusicLeagueTheme[]) => void
@@ -1264,6 +1265,19 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
       clearCompetitorAnalysis: () => {
         set({ competitorAnalysis: null })
+      },
+
+      setRecommendationPlaylist: (playlistId: string, playlistUrl: string) => {
+        const current = get().competitorAnalysis
+        if (current) {
+          set({
+            competitorAnalysis: {
+              ...current,
+              recommendationPlaylistId: playlistId,
+              recommendationPlaylistUrl: playlistUrl,
+            },
+          })
+        }
       },
 
       // === Server Sync Methods (PostgreSQL persistence) ===

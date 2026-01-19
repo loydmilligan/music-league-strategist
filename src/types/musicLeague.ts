@@ -607,4 +607,7 @@ export interface CompetitorAnalysisData {
   roundResults: RoundResults[]
   importedAt: number
   leagueName?: string
+  // Recommendation playlist (top 3 songs from each round)
+  recommendationPlaylistId?: string
+  recommendationPlaylistUrl?: string
 }
