@@ -70,7 +70,7 @@ function CompetitorCard({
             <div>
               <p className="font-medium text-sm">{competitor.name}</p>
               <p className="text-xs text-muted-foreground">
-                {competitor.submissions.length} rounds
+                {competitor.submissions?.length ?? 0} rounds
               </p>
             </div>
           </div>
@@ -99,7 +99,7 @@ function CompetitorCard({
       <CollapsibleContent>
         <div className="pl-11 pr-3 pb-3 space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Submissions</p>
-          {competitor.submissions
+          {(competitor.submissions ?? [])
             .sort((a, b) => b.pointsReceived - a.pointsReceived)
             .slice(0, 5)
             .map((submission, idx) => (
@@ -139,7 +139,7 @@ function CompetitorCard({
 
 function RoundCard({ round }: { round: RoundResults }): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
-  const top3 = round.rankings.filter(r => r.rank <= 3)
+  const top3 = (round.rankings ?? []).filter(r => r.rank <= 3)
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -148,7 +148,7 @@ function RoundCard({ round }: { round: RoundResults }): React.ReactElement {
           <div className="min-w-0 flex-1">
             <p className="font-medium text-sm truncate">{round.roundName}</p>
             <p className="text-xs text-muted-foreground">
-              {round.rankings.length} submissions
+              {round.rankings?.length ?? 0} submissions
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -180,7 +180,7 @@ function RoundCard({ round }: { round: RoundResults }): React.ReactElement {
       <CollapsibleContent>
         <div className="px-3 pb-3 space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Rankings</p>
-          {round.rankings.slice(0, 10).map((ranking, idx) => (
+          {(round.rankings ?? []).slice(0, 10).map((ranking, idx) => (
             <div
               key={idx}
               className="flex items-center justify-between text-xs"
@@ -240,7 +240,7 @@ export function CompetitorAnalysisPanel({
             Competitors
             {hasData && (
               <Badge variant="secondary" className="ml-1">
-                {competitorAnalysis.competitors.length}
+                {competitorAnalysis.competitors?.length ?? 0}
               </Badge>
             )}
           </Button>
@@ -294,11 +294,11 @@ export function CompetitorAnalysisPanel({
               <div className="flex items-center gap-4 mt-2 text-xs">
                 <div className="flex items-center gap-1">
                   <User className="h-3 w-3" />
-                  {competitorAnalysis.competitors.length} competitors
+                  {competitorAnalysis.competitors?.length ?? 0} competitors
                 </div>
                 <div className="flex items-center gap-1">
                   <Music className="h-3 w-3" />
-                  {competitorAnalysis.rounds.length} rounds
+                  {competitorAnalysis.rounds?.length ?? 0} rounds
                 </div>
               </div>
             </div>
@@ -318,7 +318,7 @@ export function CompetitorAnalysisPanel({
               <TabsContent value="leaderboard" className="flex-1 m-0">
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-2">
-                    {competitorAnalysis.competitors.map((competitor, idx) => (
+                    {(competitorAnalysis.competitors ?? []).map((competitor, idx) => (
                       <CompetitorCard
                         key={competitor.id}
                         competitor={competitor}
@@ -332,7 +332,7 @@ export function CompetitorAnalysisPanel({
               <TabsContent value="rounds" className="flex-1 m-0">
                 <ScrollArea className="h-full">
                   <div className="p-4 space-y-2">
-                    {competitorAnalysis.roundResults.map((round) => (
+                    {(competitorAnalysis.roundResults ?? []).map((round) => (
                       <RoundCard key={round.roundId} round={round} />
                     ))}
                   </div>

@@ -1038,10 +1038,13 @@ app.get('/competitor-analysis', async (req, res) => {
     }
 
     const row = result.rows[0]
+    // Return data in the expected flat structure (rounds, competitors, roundResults at top level)
     res.json({
       leagueName: row.league_name,
-      data: row.data,
-      importedAt: row.imported_at,
+      rounds: row.data?.rounds || [],
+      competitors: row.data?.competitors || [],
+      roundResults: row.data?.roundResults || [],
+      importedAt: row.data?.importedAt || Number(row.imported_at),
     })
   } catch (error) {
     console.error('Error fetching competitor analysis:', error)

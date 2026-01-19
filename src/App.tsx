@@ -9,10 +9,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useServerSync } from '@/hooks/useServerSync'
 
 function App(): React.ReactElement {
-  console.log('[App] render start')
   const openRouterKey = useSettingsStore((s) => s.openRouterKey)
   const hasApiKey = !!openRouterKey
-  console.log('[App] hasApiKey:', hasApiKey)
 
   const {
     isLoading,
@@ -23,11 +21,9 @@ function App(): React.ReactElement {
     skipMigration,
     retry,
   } = useServerSync()
-  console.log('[App] useServerSync:', { isLoading, error, migrationNeeded })
 
   // Show loading state
   if (isLoading) {
-    console.log('[App] returning loading state')
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-background text-foreground">
         <div className="flex flex-col items-center gap-4">
@@ -40,7 +36,6 @@ function App(): React.ReactElement {
 
   // Show migration prompt
   if (migrationNeeded) {
-    console.log('[App] returning migration prompt')
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-background text-foreground p-8">
         <div className="max-w-md space-y-6 text-center">
@@ -88,7 +83,6 @@ function App(): React.ReactElement {
     )
   }
 
-  console.log('[App] returning main render')
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
       {/* Minimal Header */}
