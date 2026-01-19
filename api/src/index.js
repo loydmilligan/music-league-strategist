@@ -323,12 +323,12 @@ api.get('/themes', async (req, res) => {
         strategy: row.strategy,
         title: row.title,
         status: row.status,
-        deadline: row.deadline,
+        deadline: row.deadline ? Number(row.deadline) : null,
         phase: row.phase,
         hallPassesUsed: row.hall_passes_used,
         spotifyPlaylist: row.spotify_playlist,
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
+        createdAt: Number(row.created_at),
+        updatedAt: Number(row.updated_at),
         candidates: songs.filter(s => s.tier === 'candidates' && s.song).map(s => transformSong(s.song, 'candidates')).filter(Boolean),
         semifinalists: songs.filter(s => s.tier === 'semifinalists' && s.song).map(s => transformSong(s.song, 'semifinalists')).filter(Boolean),
         finalists: songs.filter(s => s.tier === 'finalists' && s.song).map(s => transformSong(s.song, 'finalists')).filter(Boolean),
@@ -378,12 +378,12 @@ api.get('/themes/:id', async (req, res) => {
       strategy: row.strategy,
       title: row.title,
       status: row.status,
-      deadline: row.deadline,
+      deadline: row.deadline ? Number(row.deadline) : null,
       phase: row.phase,
       hallPassesUsed: row.hall_passes_used,
       spotifyPlaylist: row.spotify_playlist,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
       candidates: songs.filter(s => s.tier === 'candidates' && s.song).map(s => transformSong(s.song, 'candidates')).filter(Boolean),
       semifinalists: songs.filter(s => s.tier === 'semifinalists' && s.song).map(s => transformSong(s.song, 'semifinalists')).filter(Boolean),
       finalists: songs.filter(s => s.tier === 'finalists' && s.song).map(s => transformSong(s.song, 'finalists')).filter(Boolean),
@@ -429,12 +429,12 @@ api.post('/themes', async (req, res) => {
       strategy: row.strategy,
       title: row.title,
       status: row.status,
-      deadline: row.deadline,
+      deadline: row.deadline ? Number(row.deadline) : null,
       phase: row.phase,
       hallPassesUsed: row.hall_passes_used,
       spotifyPlaylist: row.spotify_playlist,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
       candidates: [],
       semifinalists: [],
       finalists: [],
@@ -709,10 +709,11 @@ api.delete('/themes/:themeId/songs/:songId', async (req, res) => {
 // SESSIONS API
 // ============================================================================
 
-// Get all sessions
+// Get all sessions with full data
 api.get('/sessions', async (req, res) => {
   try {
-    const result = await pool.query(`
+    // Get sessions with conversation history
+    const sessionsResult = await pool.query(`
       SELECT s.*,
         COALESCE(json_agg(
           json_build_object(
@@ -727,7 +728,76 @@ api.get('/sessions', async (req, res) => {
       ORDER BY s.updated_at DESC
     `)
 
-    const sessions = result.rows.map(row => ({
+    // Get all session songs with full song data
+    const songsResult = await pool.query(`
+      SELECT ss.session_id, songs.*
+      FROM session_songs ss
+      JOIN songs ON ss.song_id = songs.id
+    `)
+
+    // Get all rejected songs
+    const rejectedResult = await pool.query(`
+      SELECT session_id, title, artist, reason, rejected_at
+      FROM rejected_songs
+    `)
+
+    // Get all session preferences
+    const prefsResult = await pool.query(`
+      SELECT session_id, statement, confidence, source, created_at
+      FROM session_preferences
+    `)
+
+    // Build lookup maps
+    const songsBySession = new Map()
+    for (const row of songsResult.rows) {
+      const sessionId = row.session_id
+      if (!songsBySession.has(sessionId)) {
+        songsBySession.set(sessionId, [])
+      }
+      songsBySession.get(sessionId).push({
+        id: row.id,
+        title: row.title,
+        artist: row.artist,
+        album: row.album,
+        year: row.year,
+        spotifyUri: row.spotify_uri,
+        spotifyTrackId: row.spotify_track_id,
+        youtubeVideoId: row.youtube_video_id,
+        reason: row.reason,
+        addedAt: row.added_at,
+        favorite: row.favorite,
+      })
+    }
+
+    const rejectedBySession = new Map()
+    for (const row of rejectedResult.rows) {
+      const sessionId = row.session_id
+      if (!rejectedBySession.has(sessionId)) {
+        rejectedBySession.set(sessionId, [])
+      }
+      rejectedBySession.get(sessionId).push({
+        title: row.title,
+        artist: row.artist,
+        reason: row.reason,
+        rejectedAt: row.rejected_at,
+      })
+    }
+
+    const prefsBySession = new Map()
+    for (const row of prefsResult.rows) {
+      const sessionId = row.session_id
+      if (!prefsBySession.has(sessionId)) {
+        prefsBySession.set(sessionId, [])
+      }
+      prefsBySession.get(sessionId).push({
+        statement: row.statement,
+        confidence: row.confidence,
+        source: row.source,
+        createdAt: row.created_at,
+      })
+    }
+
+    const sessions = sessionsResult.rows.map(row => ({
       id: row.id,
       themeId: row.theme_id,
       title: row.title,
@@ -735,9 +805,14 @@ api.get('/sessions', async (req, res) => {
       iterationCount: row.iteration_count,
       finalPickId: row.final_pick_id,
       playlistCreated: row.playlist_created,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
       conversationHistory: row.conversation_history,
+      workingCandidates: songsBySession.get(row.id) || [],
+      candidates: songsBySession.get(row.id) || [], // For backwards compatibility
+      finalists: [], // Legacy field - finalists are now in theme
+      rejectedSongs: rejectedBySession.get(row.id) || [],
+      sessionPreferences: prefsBySession.get(row.id) || [],
     }))
 
     res.json(sessions)
@@ -747,11 +822,13 @@ api.get('/sessions', async (req, res) => {
   }
 })
 
-// Get single session
+// Get single session with full data
 api.get('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const result = await pool.query(`
+
+    // Get session with conversation history
+    const sessionResult = await pool.query(`
       SELECT s.*,
         COALESCE(json_agg(
           json_build_object(
@@ -766,11 +843,47 @@ api.get('/sessions/:id', async (req, res) => {
       GROUP BY s.id
     `, [id])
 
-    if (result.rows.length === 0) {
+    if (sessionResult.rows.length === 0) {
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    const row = result.rows[0]
+    // Get session songs
+    const songsResult = await pool.query(`
+      SELECT songs.*
+      FROM session_songs ss
+      JOIN songs ON ss.song_id = songs.id
+      WHERE ss.session_id = $1
+    `, [id])
+
+    // Get rejected songs
+    const rejectedResult = await pool.query(`
+      SELECT title, artist, reason, rejected_at
+      FROM rejected_songs
+      WHERE session_id = $1
+    `, [id])
+
+    // Get session preferences
+    const prefsResult = await pool.query(`
+      SELECT statement, confidence, source, created_at
+      FROM session_preferences
+      WHERE session_id = $1
+    `, [id])
+
+    const row = sessionResult.rows[0]
+    const workingCandidates = songsResult.rows.map(s => ({
+      id: s.id,
+      title: s.title,
+      artist: s.artist,
+      album: s.album,
+      year: s.year,
+      spotifyUri: s.spotify_uri,
+      spotifyTrackId: s.spotify_track_id,
+      youtubeVideoId: s.youtube_video_id,
+      reason: s.reason,
+      addedAt: s.added_at,
+      favorite: s.favorite,
+    }))
+
     res.json({
       id: row.id,
       themeId: row.theme_id,
@@ -779,9 +892,24 @@ api.get('/sessions/:id', async (req, res) => {
       iterationCount: row.iteration_count,
       finalPickId: row.final_pick_id,
       playlistCreated: row.playlist_created,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
       conversationHistory: row.conversation_history,
+      workingCandidates,
+      candidates: workingCandidates, // For backwards compatibility
+      finalists: [], // Legacy field
+      rejectedSongs: rejectedResult.rows.map(r => ({
+        title: r.title,
+        artist: r.artist,
+        reason: r.reason,
+        rejectedAt: r.rejected_at,
+      })),
+      sessionPreferences: prefsResult.rows.map(p => ({
+        statement: p.statement,
+        confidence: p.confidence,
+        source: p.source,
+        createdAt: p.created_at,
+      })),
     })
   } catch (error) {
     console.error('Error fetching session:', error)
@@ -789,10 +917,14 @@ api.get('/sessions/:id', async (req, res) => {
   }
 })
 
-// Create session
+// Create or update session with full data
 api.post('/sessions', async (req, res) => {
   try {
-    const { id, themeId, title, phase, iterationCount, finalPickId, playlistCreated, createdAt, updatedAt, conversationHistory } = req.body
+    const {
+      id, themeId, title, phase, iterationCount, finalPickId, playlistCreated,
+      createdAt, updatedAt, conversationHistory,
+      workingCandidates, candidates, rejectedSongs, sessionPreferences
+    } = req.body
     const now = Date.now()
     const sessionId = id || generateUUID()
 
@@ -810,7 +942,7 @@ api.post('/sessions', async (req, res) => {
       RETURNING *
     `, [sessionId, themeId, title, phase || 'exploring', iterationCount || 0, finalPickId, playlistCreated, createdAt || now, updatedAt || now])
 
-    // Also insert conversation history if provided
+    // Insert conversation history if provided
     if (conversationHistory && conversationHistory.length > 0) {
       for (const msg of conversationHistory) {
         await pool.query(`
@@ -821,6 +953,55 @@ api.post('/sessions', async (req, res) => {
       }
     }
 
+    // Handle working candidates (use workingCandidates or fall back to candidates)
+    const songsToSave = workingCandidates || candidates || []
+    if (songsToSave.length > 0) {
+      // Clear existing session songs
+      await pool.query('DELETE FROM session_songs WHERE session_id = $1', [sessionId])
+
+      for (const song of songsToSave) {
+        // First ensure the song exists in the songs table
+        await pool.query(`
+          INSERT INTO songs (id, title, artist, album, year, spotify_uri, spotify_track_id, youtube_video_id, reason, added_at, favorite)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (id) DO NOTHING
+        `, [
+          song.id, song.title, song.artist, song.album, song.year,
+          song.spotifyUri, song.spotifyTrackId, song.youtubeVideoId,
+          song.reason, song.addedAt || now, song.favorite || false
+        ])
+
+        // Then link it to the session
+        await pool.query(`
+          INSERT INTO session_songs (session_id, song_id)
+          VALUES ($1, $2)
+          ON CONFLICT DO NOTHING
+        `, [sessionId, song.id])
+      }
+    }
+
+    // Handle rejected songs
+    if (rejectedSongs && rejectedSongs.length > 0) {
+      for (const rs of rejectedSongs) {
+        await pool.query(`
+          INSERT INTO rejected_songs (session_id, title, artist, reason, rejected_at)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING
+        `, [sessionId, rs.title, rs.artist, rs.reason, rs.rejectedAt || now])
+      }
+    }
+
+    // Handle session preferences
+    if (sessionPreferences && sessionPreferences.length > 0) {
+      for (const pref of sessionPreferences) {
+        await pool.query(`
+          INSERT INTO session_preferences (session_id, statement, confidence, source, created_at)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING
+        `, [sessionId, pref.statement, pref.confidence, pref.source, pref.createdAt || now])
+      }
+    }
+
     const row = result.rows[0]
     res.status(201).json({
       id: row.id,
@@ -828,9 +1009,14 @@ api.post('/sessions', async (req, res) => {
       title: row.title,
       phase: row.phase,
       iterationCount: row.iteration_count,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      conversationHistory: [],
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+      conversationHistory: conversationHistory || [],
+      workingCandidates: songsToSave,
+      candidates: songsToSave,
+      finalists: [],
+      rejectedSongs: rejectedSongs || [],
+      sessionPreferences: sessionPreferences || [],
     })
   } catch (error) {
     console.error('Error creating session:', error)
@@ -838,11 +1024,14 @@ api.post('/sessions', async (req, res) => {
   }
 })
 
-// Update session
+// Update session with full data
 api.put('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const { title, phase, iterationCount, finalPickId, playlistCreated } = req.body
+    const {
+      title, phase, iterationCount, finalPickId, playlistCreated,
+      workingCandidates, candidates, rejectedSongs, sessionPreferences, conversationHistory
+    } = req.body
     const now = Date.now()
 
     const result = await pool.query(`
@@ -861,7 +1050,78 @@ api.put('/sessions/:id', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' })
     }
 
-    res.json(result.rows[0])
+    // Handle working candidates (use workingCandidates or fall back to candidates)
+    const songsToSave = workingCandidates || candidates
+    if (songsToSave && songsToSave.length >= 0) {
+      // Clear existing session songs
+      await pool.query('DELETE FROM session_songs WHERE session_id = $1', [id])
+
+      for (const song of songsToSave) {
+        // First ensure the song exists in the songs table
+        await pool.query(`
+          INSERT INTO songs (id, title, artist, album, year, spotify_uri, spotify_track_id, youtube_video_id, reason, added_at, favorite)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (id) DO NOTHING
+        `, [
+          song.id, song.title, song.artist, song.album, song.year,
+          song.spotifyUri, song.spotifyTrackId, song.youtubeVideoId,
+          song.reason, song.addedAt || now, song.favorite || false
+        ])
+
+        // Then link it to the session
+        await pool.query(`
+          INSERT INTO session_songs (session_id, song_id)
+          VALUES ($1, $2)
+          ON CONFLICT DO NOTHING
+        `, [id, song.id])
+      }
+    }
+
+    // Handle rejected songs (append, don't replace)
+    if (rejectedSongs && rejectedSongs.length > 0) {
+      for (const rs of rejectedSongs) {
+        await pool.query(`
+          INSERT INTO rejected_songs (session_id, title, artist, reason, rejected_at)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING
+        `, [id, rs.title, rs.artist, rs.reason, rs.rejectedAt || now])
+      }
+    }
+
+    // Handle session preferences (append, don't replace)
+    if (sessionPreferences && sessionPreferences.length > 0) {
+      for (const pref of sessionPreferences) {
+        await pool.query(`
+          INSERT INTO session_preferences (session_id, statement, confidence, source, created_at)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT DO NOTHING
+        `, [id, pref.statement, pref.confidence, pref.source, pref.createdAt || now])
+      }
+    }
+
+    // Handle conversation history (append new messages)
+    if (conversationHistory && conversationHistory.length > 0) {
+      for (const msg of conversationHistory) {
+        await pool.query(`
+          INSERT INTO conversation_history (session_id, role, content, timestamp)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT DO NOTHING
+        `, [id, msg.role, msg.content, msg.timestamp || now])
+      }
+    }
+
+    const row = result.rows[0]
+    res.json({
+      id: row.id,
+      themeId: row.theme_id,
+      title: row.title,
+      phase: row.phase,
+      iterationCount: row.iteration_count,
+      finalPickId: row.final_pick_id,
+      playlistCreated: row.playlist_created,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    })
   } catch (error) {
     console.error('Error updating session:', error)
     res.status(500).json({ error: 'Failed to update session' })

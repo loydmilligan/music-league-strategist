@@ -32,8 +32,16 @@ export function SessionManager({ className }: SessionManagerProps): React.ReactE
     }
   }
 
-  const formatSessionTime = (timestamp: number): string => {
-    const date = new Date(timestamp)
+  const formatSessionTime = (timestamp: number | string | undefined): string => {
+    if (!timestamp) return ''
+
+    // Handle both numeric timestamps and ISO date strings
+    const numericTimestamp = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp
+    if (isNaN(numericTimestamp)) return ''
+
+    const date = new Date(numericTimestamp)
+    if (isNaN(date.getTime())) return ''
+
     const now = new Date()
     const isToday = date.toDateString() === now.toDateString()
 
