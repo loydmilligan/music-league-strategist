@@ -34,6 +34,7 @@ function generateSongId(): string {
   return `song-${Math.random().toString(36).slice(2, 11)}`
 }
 
+
 // Generate a title from the raw theme text
 function generateThemeTitle(rawTheme: string): string {
   // Take first line, trim, and limit to 50 chars
@@ -274,6 +275,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
           error: null,
         }))
 
+
         return id
       },
 
@@ -359,6 +361,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
           activeSessionId: id,
           error: null,
         }))
+
 
         return id
       },
@@ -463,6 +466,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             return newTheme
           }),
         }))
+
       },
 
       demoteSong: (themeId: string, song: Song, toTier: FunnelTier, reason?: string) => {
@@ -511,6 +515,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             return newTheme
           }),
         }))
+
       },
 
       removeSongFromTier: (themeId: string, songId: string, tier: FunnelTier) => {
@@ -532,6 +537,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             return newTheme
           }),
         }))
+
       },
 
       addCandidateToTheme: (themeId: string, song: Song) => {
@@ -571,6 +577,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             }
           }),
         }))
+
       },
 
       setThemePick: (themeId: string, song: Song | null) => {
@@ -581,6 +588,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
               : t
           ),
         }))
+
       },
 
       // === Song Metadata ===
@@ -602,6 +610,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             }
           }),
         }))
+
       },
 
       reorderSongsInTier: (themeId: string, tier: FunnelTier, songIds: string[]) => {
@@ -633,6 +642,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             return newTheme
           }),
         }))
+
       },
 
       // === Playlist Sync ===
@@ -653,6 +663,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
               : t
           ),
         }))
+
       },
 
       setPhase: (phase) => {
@@ -744,6 +755,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             }
           }),
         }))
+
       },
 
       setFinalists: (songs) => {
@@ -799,6 +811,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
               : s
           ),
         }))
+
       },
 
       clearConversation: () => {
@@ -1203,12 +1216,14 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
         set((state) => ({
           songsILike: [...state.songsILike, savedSong],
         }))
+
       },
 
       removeFromSongsILike: (songId: string) => {
         set((state) => ({
           songsILike: state.songsILike.filter(s => s.id !== songId),
         }))
+
       },
 
       updateSongILikeTags: (songId: string, tags: string[]) => {

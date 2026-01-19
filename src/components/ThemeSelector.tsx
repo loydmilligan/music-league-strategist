@@ -1,4 +1,5 @@
-import { Plus, Archive, CheckCircle, Calendar } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Plus, Archive, CheckCircle, Calendar, Pencil, Check, X } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -64,11 +65,49 @@ function parseDateTimeInput(value: string): number | undefined {
 }
 
 export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): React.ReactElement {
-  const { themes, activeThemeId, setActiveTheme, createTheme, setThemeDeadline, activeTheme } = useMusicLeagueStore()
+  const { themes, activeThemeId, setActiveTheme, createTheme, setThemeDeadline, activeTheme, updateTheme } = useMusicLeagueStore()
+  const [isEditing, setIsEditing] = useState(false)
+  const [editTitle, setEditTitle] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   const activeThemes = themes.filter((t) => t.status === 'active')
   const archivedThemes = themes.filter((t) => t.status === 'archived' || t.status === 'submitted')
   const currentTheme = activeTheme()
+
+  // Focus input when editing starts
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus()
+      inputRef.current.select()
+    }
+  }, [isEditing])
+
+  const handleStartEdit = (): void => {
+    if (currentTheme) {
+      setEditTitle(currentTheme.title)
+      setIsEditing(true)
+    }
+  }
+
+  const handleSaveEdit = (): void => {
+    if (activeThemeId && editTitle.trim()) {
+      updateTheme(activeThemeId, { title: editTitle.trim() })
+    }
+    setIsEditing(false)
+  }
+
+  const handleCancelEdit = (): void => {
+    setIsEditing(false)
+    setEditTitle('')
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Enter') {
+      handleSaveEdit()
+    } else if (e.key === 'Escape') {
+      handleCancelEdit()
+    }
+  }
 
   const handleNewTheme = (): void => {
     if (onNewTheme) {
@@ -88,51 +127,99 @@ export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): Re
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
-      <Select
-        value={activeThemeId ?? ''}
-        onValueChange={(value) => setActiveTheme(value || null)}
-      >
-        <SelectTrigger className="h-8 w-[200px] text-sm">
-          <SelectValue placeholder="Select theme..." />
-        </SelectTrigger>
-        <SelectContent>
-          {activeThemes.length > 0 && (
-            <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                Active Themes
-              </div>
-              {activeThemes.map((theme) => (
-                <SelectItem key={theme.id} value={theme.id}>
-                  <div className="flex items-center">
-                    <span className="truncate max-w-[150px]">{theme.title}</span>
-                    {getStatusBadge(theme)}
+      {/* Inline editing mode */}
+      {isEditing ? (
+        <div className="flex items-center gap-1">
+          <Input
+            ref={inputRef}
+            value={editTitle}
+            onChange={(e) => setEditTitle(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleSaveEdit}
+            className="h-8 w-[200px] text-sm"
+            placeholder="Theme name..."
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 min-w-[44px] min-h-[44px] text-green-500"
+            onClick={handleSaveEdit}
+            title="Save"
+          >
+            <Check className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 min-w-[44px] min-h-[44px] text-red-500"
+            onClick={handleCancelEdit}
+            title="Cancel"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <>
+          <Select
+            value={activeThemeId ?? ''}
+            onValueChange={(value) => setActiveTheme(value || null)}
+          >
+            <SelectTrigger className="h-8 w-[200px] text-sm">
+              <SelectValue placeholder="Select theme..." />
+            </SelectTrigger>
+            <SelectContent>
+              {activeThemes.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                    Active Themes
                   </div>
-                </SelectItem>
-              ))}
-            </>
-          )}
-          {archivedThemes.length > 0 && (
-            <>
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground mt-2">
-                Archived
-              </div>
-              {archivedThemes.map((theme) => (
-                <SelectItem key={theme.id} value={theme.id}>
-                  <div className="flex items-center opacity-60">
-                    <span className="truncate max-w-[150px]">{theme.title}</span>
-                    {getStatusBadge(theme)}
+                  {activeThemes.map((theme) => (
+                    <SelectItem key={theme.id} value={theme.id}>
+                      <div className="flex items-center">
+                        <span className="truncate max-w-[150px]">{theme.title}</span>
+                        {getStatusBadge(theme)}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              {archivedThemes.length > 0 && (
+                <>
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground mt-2">
+                    Archived
                   </div>
-                </SelectItem>
-              ))}
-            </>
+                  {archivedThemes.map((theme) => (
+                    <SelectItem key={theme.id} value={theme.id}>
+                      <div className="flex items-center opacity-60">
+                        <span className="truncate max-w-[150px]">{theme.title}</span>
+                        {getStatusBadge(theme)}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+              {themes.length === 0 && (
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  No themes yet
+                </div>
+              )}
+            </SelectContent>
+          </Select>
+
+          {/* Edit Theme Name Button */}
+          {activeThemeId && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 min-w-[44px] min-h-[44px]"
+              onClick={handleStartEdit}
+              title="Edit theme name"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
           )}
-          {themes.length === 0 && (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-              No themes yet
-            </div>
-          )}
-        </SelectContent>
-      </Select>
+        </>
+      )}
 
       {/* Deadline Picker (Feature 2) */}
       {activeThemeId && (

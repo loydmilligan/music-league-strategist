@@ -10,4 +10,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api/ml': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api/songlink': {
+        target: 'https://api.song.link',
+        changeOrigin: true,
+        secure: true,
+        rewrite: p => p.replace(/^\/api\/songlink\//, '/'),
+      },
+    },
+  },
 })

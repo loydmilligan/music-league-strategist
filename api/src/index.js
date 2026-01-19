@@ -60,8 +60,12 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
+// API routes are served at /api/ml (reverse-proxied in nginx and Vite)
+const api = express.Router()
+app.use('/api/ml', api)
+
 // Health check
-app.get('/health', (req, res) => {
+api.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
@@ -70,6 +74,8 @@ async function initDatabase() {
   const client = await pool.connect()
   try {
     await client.query(`
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
       -- Themes table
       CREATE TABLE IF NOT EXISTS themes (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -259,7 +265,7 @@ async function initDatabase() {
 // ============================================================================
 
 // Get all themes (with song counts)
-app.get('/themes', async (req, res) => {
+api.get('/themes', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT t.*,
@@ -309,7 +315,7 @@ app.get('/themes', async (req, res) => {
 })
 
 // Get single theme with all songs
-app.get('/themes/:id', async (req, res) => {
+api.get('/themes/:id', async (req, res) => {
   try {
     const { id } = req.params
     const result = await pool.query(`
@@ -363,7 +369,7 @@ app.get('/themes/:id', async (req, res) => {
 })
 
 // Create theme
-app.post('/themes', async (req, res) => {
+api.post('/themes', async (req, res) => {
   try {
     const { rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist } = req.body
     const now = Date.now()
@@ -400,7 +406,7 @@ app.post('/themes', async (req, res) => {
 })
 
 // Update theme
-app.put('/themes/:id', async (req, res) => {
+api.put('/themes/:id', async (req, res) => {
   try {
     const { id } = req.params
     const { rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist } = req.body
@@ -434,7 +440,7 @@ app.put('/themes/:id', async (req, res) => {
 })
 
 // Delete theme
-app.delete('/themes/:id', async (req, res) => {
+api.delete('/themes/:id', async (req, res) => {
   try {
     const { id } = req.params
     await pool.query('DELETE FROM themes WHERE id = $1', [id])
@@ -450,7 +456,7 @@ app.delete('/themes/:id', async (req, res) => {
 // ============================================================================
 
 // Add song to theme
-app.post('/themes/:themeId/songs', async (req, res) => {
+api.post('/themes/:themeId/songs', async (req, res) => {
   const client = await pool.connect()
   try {
     const { themeId } = req.params
@@ -555,7 +561,7 @@ app.post('/themes/:themeId/songs', async (req, res) => {
 })
 
 // Update song in theme (change tier, mute, etc)
-app.put('/themes/:themeId/songs/:songId', async (req, res) => {
+api.put('/themes/:themeId/songs/:songId', async (req, res) => {
   const client = await pool.connect()
   try {
     const { themeId, songId } = req.params
@@ -645,7 +651,7 @@ app.put('/themes/:themeId/songs/:songId', async (req, res) => {
 })
 
 // Remove song from theme
-app.delete('/themes/:themeId/songs/:songId', async (req, res) => {
+api.delete('/themes/:themeId/songs/:songId', async (req, res) => {
   try {
     const { themeId, songId } = req.params
     await pool.query('DELETE FROM theme_songs WHERE theme_id = $1 AND song_id = $2', [themeId, songId])
@@ -662,7 +668,7 @@ app.delete('/themes/:themeId/songs/:songId', async (req, res) => {
 // ============================================================================
 
 // Get all sessions
-app.get('/sessions', async (req, res) => {
+api.get('/sessions', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT s.*,
@@ -700,7 +706,7 @@ app.get('/sessions', async (req, res) => {
 })
 
 // Get single session
-app.get('/sessions/:id', async (req, res) => {
+api.get('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params
     const result = await pool.query(`
@@ -742,7 +748,7 @@ app.get('/sessions/:id', async (req, res) => {
 })
 
 // Create session
-app.post('/sessions', async (req, res) => {
+api.post('/sessions', async (req, res) => {
   try {
     const { themeId, title, phase } = req.body
     const now = Date.now()
@@ -771,7 +777,7 @@ app.post('/sessions', async (req, res) => {
 })
 
 // Update session
-app.put('/sessions/:id', async (req, res) => {
+api.put('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params
     const { title, phase, iterationCount, finalPickId, playlistCreated } = req.body
@@ -801,7 +807,7 @@ app.put('/sessions/:id', async (req, res) => {
 })
 
 // Delete session
-app.delete('/sessions/:id', async (req, res) => {
+api.delete('/sessions/:id', async (req, res) => {
   try {
     const { id } = req.params
     await pool.query('DELETE FROM sessions WHERE id = $1', [id])
@@ -813,7 +819,7 @@ app.delete('/sessions/:id', async (req, res) => {
 })
 
 // Add message to session
-app.post('/sessions/:id/messages', async (req, res) => {
+api.post('/sessions/:id/messages', async (req, res) => {
   try {
     const { id } = req.params
     const { role, content, timestamp } = req.body
@@ -837,7 +843,7 @@ app.post('/sessions/:id/messages', async (req, res) => {
 // ============================================================================
 
 // Get user profile
-app.get('/profile', async (req, res) => {
+api.get('/profile', async (req, res) => {
   try {
     const userId = req.query.userId || 'default'
 
@@ -882,7 +888,7 @@ app.get('/profile', async (req, res) => {
 })
 
 // Update user profile
-app.put('/profile', async (req, res) => {
+api.put('/profile', async (req, res) => {
   const client = await pool.connect()
   try {
     const userId = req.query.userId || 'default'
@@ -929,7 +935,7 @@ app.put('/profile', async (req, res) => {
 // ============================================================================
 
 // Get saved songs
-app.get('/saved-songs', async (req, res) => {
+api.get('/saved-songs', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT ss.*, s.*
@@ -964,7 +970,7 @@ app.get('/saved-songs', async (req, res) => {
 })
 
 // Save a song
-app.post('/saved-songs', async (req, res) => {
+api.post('/saved-songs', async (req, res) => {
   const client = await pool.connect()
   try {
     const { song, tags, notes, sourceThemeId } = req.body
@@ -1009,7 +1015,7 @@ app.post('/saved-songs', async (req, res) => {
 })
 
 // Remove saved song
-app.delete('/saved-songs/:songId', async (req, res) => {
+api.delete('/saved-songs/:songId', async (req, res) => {
   try {
     const { songId } = req.params
     await pool.query('DELETE FROM saved_songs WHERE song_id = $1', [songId])
@@ -1025,7 +1031,7 @@ app.delete('/saved-songs/:songId', async (req, res) => {
 // ============================================================================
 
 // Get competitor analysis
-app.get('/competitor-analysis', async (req, res) => {
+api.get('/competitor-analysis', async (req, res) => {
   try {
     const userId = req.query.userId || 'default'
     const result = await pool.query(
@@ -1053,7 +1059,7 @@ app.get('/competitor-analysis', async (req, res) => {
 })
 
 // Import competitor analysis
-app.post('/competitor-analysis', async (req, res) => {
+api.post('/competitor-analysis', async (req, res) => {
   try {
     const userId = req.query.userId || 'default'
     const { leagueName, data } = req.body
@@ -1080,7 +1086,7 @@ app.post('/competitor-analysis', async (req, res) => {
 // ============================================================================
 
 // Get settings
-app.get('/settings', async (req, res) => {
+api.get('/settings', async (req, res) => {
   try {
     const userId = req.query.userId || 'default'
     const result = await pool.query(
@@ -1106,7 +1112,7 @@ app.get('/settings', async (req, res) => {
 })
 
 // Update settings
-app.put('/settings', async (req, res) => {
+api.put('/settings', async (req, res) => {
   try {
     const userId = req.query.userId || 'default'
     const settings = req.body
@@ -1128,7 +1134,7 @@ app.put('/settings', async (req, res) => {
 })
 
 // Patch settings (partial update)
-app.patch('/settings', async (req, res) => {
+api.patch('/settings', async (req, res) => {
   try {
     const userId = req.query.userId || 'default'
     const updates = req.body
@@ -1163,7 +1169,7 @@ app.patch('/settings', async (req, res) => {
 // ============================================================================
 
 // Get all models
-app.get('/models', async (req, res) => {
+api.get('/models', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT * FROM ai_models ORDER BY favorite DESC, sort_order ASC, created_at DESC'
@@ -1192,7 +1198,7 @@ app.get('/models', async (req, res) => {
 })
 
 // Create model
-app.post('/models', async (req, res) => {
+api.post('/models', async (req, res) => {
   try {
     const { modelId, nickname, description, tags, favorite, modelType, contextLength, pricing, sortOrder } = req.body
     const now = Date.now()
@@ -1225,7 +1231,7 @@ app.post('/models', async (req, res) => {
 })
 
 // Update model
-app.put('/models/:id', async (req, res) => {
+api.put('/models/:id', async (req, res) => {
   try {
     const { id } = req.params
     const { modelId, nickname, description, tags, favorite, modelType, contextLength, pricing, sortOrder } = req.body
@@ -1259,7 +1265,7 @@ app.put('/models/:id', async (req, res) => {
 })
 
 // Delete model
-app.delete('/models/:id', async (req, res) => {
+api.delete('/models/:id', async (req, res) => {
   try {
     const { id } = req.params
     await pool.query('DELETE FROM ai_models WHERE id = $1', [id])
@@ -1274,7 +1280,7 @@ app.delete('/models/:id', async (req, res) => {
 // MIGRATION API (import from localStorage)
 // ============================================================================
 
-app.post('/migrate', async (req, res) => {
+api.post('/migrate', async (req, res) => {
   const client = await pool.connect()
   try {
     const { themes, sessions, userProfile, songsILike, settings, competitorAnalysis } = req.body
@@ -1468,7 +1474,7 @@ app.post('/migrate', async (req, res) => {
 })
 
 // Check if database has data (for migration detection)
-app.get('/has-data', async (req, res) => {
+api.get('/has-data', async (req, res) => {
   try {
     const result = await pool.query('SELECT COUNT(*) as count FROM themes')
     res.json({ hasData: parseInt(result.rows[0].count) > 0 })

@@ -1,16 +1,26 @@
+import { useEffect } from 'react'
 import { Music2, Settings, Loader2, RefreshCw, Database, HardDrive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { initializeStoreSync } from '@/stores/storeSync'
 import { MusicLeagueStrategist } from '@/components/MusicLeagueStrategist'
 import { SettingsModal } from '@/components/SettingsModal'
 import { SongsILikeButton } from '@/components/SongsILikePanel'
 import { CompetitorAnalysisPanel } from '@/components/CompetitorAnalysisPanel'
 import { HelpModal } from '@/components/HelpModal'
+import { SyncStatusButton } from '@/components/SyncStatusButton'
+import { PlayerPanel } from '@/components/PlayerPanel'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useServerSync } from '@/hooks/useServerSync'
 
 function App(): React.ReactElement {
   const openRouterKey = useSettingsStore((s) => s.openRouterKey)
   const hasApiKey = !!openRouterKey
+
+  // Initialize store sync on mount
+  useEffect(() => {
+    const unsubscribe = initializeStoreSync()
+    return () => unsubscribe()
+  }, [])
 
   const {
     isLoading,
@@ -21,6 +31,7 @@ function App(): React.ReactElement {
     skipMigration,
     retry,
   } = useServerSync()
+
 
   // Show loading state
   if (isLoading) {
@@ -94,6 +105,8 @@ function App(): React.ReactElement {
           <span className="font-semibold">Music League Strategist</span>
         </div>
         <div className="flex items-center gap-1">
+          <PlayerPanel />
+          <SyncStatusButton />
           <HelpModal />
           <SongsILikeButton />
           <CompetitorAnalysisPanel />

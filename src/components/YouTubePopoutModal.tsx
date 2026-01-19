@@ -40,33 +40,6 @@ export function YouTubePopoutModal({
   const playerRef = useRef<YT.Player | null>(null)
   const [playerReady, setPlayerReady] = useState(false)
 
-  // Initialize YouTube IFrame API
-  useEffect(() => {
-    if (!open || !videoId) return
-
-    // Load YouTube IFrame API if not already loaded
-    if (!window.YT) {
-      const tag = document.createElement('script')
-      tag.src = 'https://www.youtube.com/iframe_api'
-      const firstScriptTag = document.getElementsByTagName('script')[0]
-      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag)
-
-      window.onYouTubeIframeAPIReady = () => {
-        initializePlayer()
-      }
-    } else if (window.YT.Player) {
-      initializePlayer()
-    }
-
-    return () => {
-      if (playerRef.current) {
-        playerRef.current.destroy()
-        playerRef.current = null
-      }
-      setPlayerReady(false)
-    }
-  }, [open, videoId])
-
   const initializePlayer = useCallback(() => {
     if (playerRef.current) {
       playerRef.current.destroy()
@@ -104,6 +77,33 @@ export function YouTubePopoutModal({
       },
     })
   }, [videoId])
+
+  // Initialize YouTube IFrame API
+  useEffect(() => {
+    if (!open || !videoId) return
+
+    // Load YouTube IFrame API if not already loaded
+    if (!window.YT) {
+      const tag = document.createElement('script')
+      tag.src = 'https://www.youtube.com/iframe_api'
+      const firstScriptTag = document.getElementsByTagName('script')[0]
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag)
+
+      window.onYouTubeIframeAPIReady = () => {
+        initializePlayer()
+      }
+    } else if (window.YT.Player) {
+      initializePlayer()
+    }
+
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.destroy()
+        playerRef.current = null
+      }
+      setPlayerReady(false)
+    }
+  }, [open, videoId, initializePlayer])
 
   // Insert timestamp into notes
   const handleInsertTimestamp = useCallback(() => {

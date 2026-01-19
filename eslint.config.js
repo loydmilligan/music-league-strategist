@@ -19,5 +19,24 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // shadcn/ui exports variants alongside components by design
+      'react-refresh/only-export-components': 'off',
+
+      // allow YT namespace in YouTubePopoutModal and similar ambient types
+      '@typescript-eslint/no-namespace': 'off',
+    },
+  },
+  {
+    files: ['**/*.test.{ts,tsx}', '**/src/test/**'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
   },
 ])

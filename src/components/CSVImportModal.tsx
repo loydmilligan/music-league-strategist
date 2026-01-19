@@ -76,7 +76,7 @@ export function CSVImportModal({ trigger }: CSVImportModalProps): React.ReactEle
         ...prev,
         [key]: { file, content, error: null },
       }))
-    } catch (err) {
+    } catch {
       setFiles(prev => ({
         ...prev,
         [key]: { file, content: null, error: 'Failed to read file' },
