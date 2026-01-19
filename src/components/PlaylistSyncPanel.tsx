@@ -32,13 +32,13 @@ function getSongsForTier(theme: MusicLeagueTheme, tier: FunnelTier, includeMuted
       songs = theme.pick ? [theme.pick] : []
       break
     case 'finalists':
-      songs = theme.finalists
+      songs = theme.finalists ?? []
       break
     case 'semifinalists':
-      songs = theme.semifinalists
+      songs = theme.semifinalists ?? []
       break
     case 'candidates':
-      songs = theme.candidates
+      songs = theme.candidates ?? []
       break
   }
   // Filter out muted songs unless explicitly including them
@@ -222,8 +222,8 @@ export function QuickSyncButton({ theme }: { theme: MusicLeagueTheme }): React.R
 
   const handleQuickSync = async (): Promise<void> => {
     // Sync finalists by default, or semifinalists if no finalists
-    const tier: FunnelTier = theme.finalists.length > 0 ? 'finalists' :
-      theme.semifinalists.length > 0 ? 'semifinalists' : 'candidates'
+    const tier: FunnelTier = (theme.finalists?.length ?? 0) > 0 ? 'finalists' :
+      (theme.semifinalists?.length ?? 0) > 0 ? 'semifinalists' : 'candidates'
     const songs = getSongsForTier(theme, tier, false) // Exclude muted
 
     if (songs.length === 0) return
@@ -253,9 +253,9 @@ export function QuickSyncButton({ theme }: { theme: MusicLeagueTheme }): React.R
     }
   }
 
-  const hasAnySongs = theme.finalists.length > 0 ||
-    theme.semifinalists.length > 0 ||
-    theme.candidates.length > 0
+  const hasAnySongs = (theme.finalists?.length ?? 0) > 0 ||
+    (theme.semifinalists?.length ?? 0) > 0 ||
+    (theme.candidates?.length ?? 0) > 0
 
   return (
     <Button

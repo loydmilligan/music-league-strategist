@@ -520,11 +520,11 @@ export function FunnelVisualization({
       case 'pick':
         return theme.pick ? [theme.pick] : []
       case 'finalists':
-        return theme.finalists
+        return theme.finalists ?? []
       case 'semifinalists':
-        return theme.semifinalists
+        return theme.semifinalists ?? []
       case 'candidates':
-        return theme.candidates
+        return theme.candidates ?? []
     }
   }
 
@@ -540,9 +540,9 @@ export function FunnelVisualization({
       {!compact && (
         <PhaseProgressBar
           currentPhase={currentPhase}
-          candidateCount={theme.candidates.length}
-          semifinalistCount={theme.semifinalists.length}
-          finalistCount={theme.finalists.length}
+          candidateCount={theme.candidates?.length ?? 0}
+          semifinalistCount={theme.semifinalists?.length ?? 0}
+          finalistCount={theme.finalists?.length ?? 0}
           hasPick={theme.pick !== null}
           compact={true}
         />
@@ -620,19 +620,19 @@ export function FunnelSummary({ theme }: { theme: MusicLeagueTheme }): React.Rea
           <Trophy className="h-2.5 w-2.5 mr-0.5" />1
         </Badge>
       )}
-      {theme.finalists.length > 0 && (
+      {(theme.finalists?.length ?? 0) > 0 && (
         <Badge variant="outline" className="text-[10px] px-1">
-          {theme.finalists.length}F
+          {theme.finalists?.length ?? 0}F
         </Badge>
       )}
-      {theme.semifinalists.length > 0 && (
+      {(theme.semifinalists?.length ?? 0) > 0 && (
         <Badge variant="outline" className="text-[10px] px-1">
-          {theme.semifinalists.length}S
+          {theme.semifinalists?.length ?? 0}S
         </Badge>
       )}
-      {theme.candidates.length > 0 && (
+      {(theme.candidates?.length ?? 0) > 0 && (
         <Badge variant="outline" className="text-[10px] px-1">
-          {theme.candidates.length}C
+          {theme.candidates?.length ?? 0}C
         </Badge>
       )}
     </div>

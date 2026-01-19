@@ -134,7 +134,7 @@ export function SessionBadge(): React.ReactElement | null {
 
   if (!session) return null
 
-  const messageCount = session.conversationHistory.length
+  const messageCount = session.conversationHistory?.length ?? 0
 
   return (
     <Badge variant="outline" className="text-xs">

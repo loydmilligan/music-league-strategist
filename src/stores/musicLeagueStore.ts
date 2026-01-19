@@ -539,14 +539,17 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
           themes: state.themes.map((t) => {
             if (t.id !== themeId) return t
 
+            // Ensure candidates array exists
+            const candidates = t.candidates ?? []
+
             // Check limit
-            if (t.candidates.length >= FUNNEL_TIER_LIMITS.candidates) {
+            if (candidates.length >= FUNNEL_TIER_LIMITS.candidates) {
               console.warn(`Cannot add candidate: tier is full (${FUNNEL_TIER_LIMITS.candidates})`)
               return t
             }
 
             // Check for duplicates
-            if (t.candidates.some((s) =>
+            if (candidates.some((s) =>
               s.title.toLowerCase() === song.title.toLowerCase() &&
               s.artist.toLowerCase() === song.artist.toLowerCase()
             )) {
@@ -563,7 +566,7 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
             return {
               ...t,
-              candidates: [...t.candidates, candidateSong],
+              candidates: [...candidates, candidateSong],
               updatedAt: Date.now(),
             }
           }),
@@ -1049,25 +1052,28 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
           lines.push('')
         }
 
-        if (theme.finalists.length > 0) {
-          lines.push(`## Finalists (${theme.finalists.length}/${FUNNEL_TIER_LIMITS.finalists})`)
-          theme.finalists.forEach((s, i) => {
+        const finalists = theme.finalists ?? []
+        if (finalists.length > 0) {
+          lines.push(`## Finalists (${finalists.length}/${FUNNEL_TIER_LIMITS.finalists})`)
+          finalists.forEach((s, i) => {
             lines.push(`${i + 1}. "${s.title}" by ${s.artist}`)
           })
           lines.push('')
         }
 
-        if (theme.semifinalists.length > 0) {
-          lines.push(`## Semifinalists (${theme.semifinalists.length}/${FUNNEL_TIER_LIMITS.semifinalists})`)
-          theme.semifinalists.forEach((s, i) => {
+        const semifinalists = theme.semifinalists ?? []
+        if (semifinalists.length > 0) {
+          lines.push(`## Semifinalists (${semifinalists.length}/${FUNNEL_TIER_LIMITS.semifinalists})`)
+          semifinalists.forEach((s, i) => {
             lines.push(`${i + 1}. "${s.title}" by ${s.artist}`)
           })
           lines.push('')
         }
 
-        if (theme.candidates.length > 0) {
-          lines.push(`## Candidates (${theme.candidates.length}/${FUNNEL_TIER_LIMITS.candidates})`)
-          theme.candidates.forEach((s, i) => {
+        const candidates = theme.candidates ?? []
+        if (candidates.length > 0) {
+          lines.push(`## Candidates (${candidates.length}/${FUNNEL_TIER_LIMITS.candidates})`)
+          candidates.forEach((s, i) => {
             lines.push(`${i + 1}. "${s.title}" by ${s.artist}`)
           })
           lines.push('')
@@ -1087,13 +1093,13 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
         if (theme.pick) return 'complete'
 
         // Decide: 4+ semifinalists
-        if (theme.semifinalists.length >= PHASE_THRESHOLDS.decide.semifinalists) return 'decide'
+        if ((theme.semifinalists?.length ?? 0) >= PHASE_THRESHOLDS.decide.semifinalists) return 'decide'
 
         // Refine: 8+ candidates
-        if (theme.candidates.length >= PHASE_THRESHOLDS.refine.candidates) return 'refine'
+        if ((theme.candidates?.length ?? 0) >= PHASE_THRESHOLDS.refine.candidates) return 'refine'
 
         // Brainstorm: theme exists (has candidates or just created)
-        if (theme.candidates.length > 0 || theme.id) return 'brainstorm'
+        if ((theme.candidates?.length ?? 0) > 0 || theme.id) return 'brainstorm'
 
         return 'idle'
       },
@@ -1130,8 +1136,8 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
         // Check tier limits
         const targetTier = tier === 'semifinals' ? 'semifinalists' : 'finalists'
         const currentCount = tier === 'semifinals'
-          ? theme.semifinalists.length
-          : theme.finalists.length
+          ? (theme.semifinalists?.length ?? 0)
+          : (theme.finalists?.length ?? 0)
         const limit = FUNNEL_TIER_LIMITS[targetTier]
 
         if (currentCount >= limit) return false // Tier is full
@@ -1163,8 +1169,8 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
               ...t,
               hallPassesUsed: updatedHallPasses,
               [targetTier]: tier === 'semifinals'
-                ? [...t.semifinalists, songWithTier]
-                : [...t.finalists, songWithTier],
+                ? [...(t.semifinalists ?? []), songWithTier]
+                : [...(t.finalists ?? []), songWithTier],
               updatedAt: Date.now(),
             }
           }),
@@ -1367,23 +1373,26 @@ export function formatFunnelForPrompt(theme: MusicLeagueTheme): string {
     parts.push(`PICK: "${theme.pick.title}" by ${theme.pick.artist}`)
   }
 
-  if (theme.finalists.length > 0) {
-    parts.push(`\nFINALISTS (${theme.finalists.length}/${FUNNEL_TIER_LIMITS.finalists}):`)
-    theme.finalists.forEach((s, i) => {
+  const finalists = theme.finalists ?? []
+  if (finalists.length > 0) {
+    parts.push(`\nFINALISTS (${finalists.length}/${FUNNEL_TIER_LIMITS.finalists}):`)
+    finalists.forEach((s, i) => {
       parts.push(`  ${i + 1}. "${s.title}" by ${s.artist}`)
     })
   }
 
-  if (theme.semifinalists.length > 0) {
-    parts.push(`\nSEMIFINALISTS (${theme.semifinalists.length}/${FUNNEL_TIER_LIMITS.semifinalists}):`)
-    theme.semifinalists.forEach((s, i) => {
+  const semifinalists = theme.semifinalists ?? []
+  if (semifinalists.length > 0) {
+    parts.push(`\nSEMIFINALISTS (${semifinalists.length}/${FUNNEL_TIER_LIMITS.semifinalists}):`)
+    semifinalists.forEach((s, i) => {
       parts.push(`  ${i + 1}. "${s.title}" by ${s.artist}`)
     })
   }
 
-  if (theme.candidates.length > 0) {
-    parts.push(`\nCANDIDATES (${theme.candidates.length}/${FUNNEL_TIER_LIMITS.candidates}):`)
-    theme.candidates.forEach((s, i) => {
+  const candidates = theme.candidates ?? []
+  if (candidates.length > 0) {
+    parts.push(`\nCANDIDATES (${candidates.length}/${FUNNEL_TIER_LIMITS.candidates}):`)
+    candidates.forEach((s, i) => {
       parts.push(`  ${i + 1}. "${s.title}" by ${s.artist}`)
     })
   }

@@ -206,9 +206,9 @@ export function ThemeSelectorCompact({ className }: { className?: string }): Rea
   const getFunnelSummary = (t: MusicLeagueTheme): string => {
     const parts: string[] = []
     if (t.pick) parts.push('1 pick')
-    if (t.finalists.length > 0) parts.push(`${t.finalists.length} finalists`)
-    if (t.semifinalists.length > 0) parts.push(`${t.semifinalists.length} semis`)
-    if (t.candidates.length > 0) parts.push(`${t.candidates.length} candidates`)
+    if ((t.finalists?.length ?? 0) > 0) parts.push(`${t.finalists.length} finalists`)
+    if ((t.semifinalists?.length ?? 0) > 0) parts.push(`${t.semifinalists.length} semis`)
+    if ((t.candidates?.length ?? 0) > 0) parts.push(`${t.candidates.length} candidates`)
     return parts.length > 0 ? parts.join(', ') : 'Empty funnel'
   }
 
