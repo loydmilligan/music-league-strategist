@@ -47,52 +47,106 @@ interface VoteRow extends Record<string, string> {
 }
 
 // Parse CSV content into array of objects
+// Handles multi-line quoted fields correctly
 function parseCSV<T extends Record<string, string>>(csvContent: string): T[] {
-  const lines = csvContent.trim().split('\n')
-  if (lines.length < 2) return []
+  const rows = parseCSVRows(csvContent)
+  if (rows.length < 2) return []
 
-  const headers = parseCSVLine(lines[0])
-  const rows: T[] = []
+  const headers = rows[0]
+  const result: T[] = []
 
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i])
+  for (let i = 1; i < rows.length; i++) {
+    const values = rows[i]
     if (values.length !== headers.length) continue
 
     const row: Record<string, string> = {}
     headers.forEach((header, index) => {
       row[header] = values[index]
     })
-    rows.push(row as T)
+    result.push(row as T)
+  }
+
+  return result
+}
+
+// Parse CSV content handling multi-line quoted fields
+function parseCSVRows(csvContent: string): string[][] {
+  const rows: string[][] = []
+  let currentRow: string[] = []
+  let currentField = ''
+  let inQuotes = false
+
+  for (let i = 0; i < csvContent.length; i++) {
+    const char = csvContent[i]
+    const nextChar = csvContent[i + 1]
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        // Escaped quote inside quoted field
+        currentField += '"'
+        i++ // Skip next quote
+      } else {
+        // Toggle quote mode
+        inQuotes = !inQuotes
+      }
+    } else if (char === ',' && !inQuotes) {
+      // End of field
+      currentRow.push(currentField.trim())
+      currentField = ''
+    } else if ((char === '\n' || (char === '\r' && nextChar === '\n')) && !inQuotes) {
+      // End of row (handle both \n and \r\n)
+      currentRow.push(currentField.trim())
+      if (currentRow.length > 0 && currentRow.some(f => f !== '')) {
+        rows.push(currentRow)
+      }
+      currentRow = []
+      currentField = ''
+      if (char === '\r') i++ // Skip \n in \r\n
+    } else if (char === '\r' && !inQuotes) {
+      // Handle standalone \r as line ending
+      currentRow.push(currentField.trim())
+      if (currentRow.length > 0 && currentRow.some(f => f !== '')) {
+        rows.push(currentRow)
+      }
+      currentRow = []
+      currentField = ''
+    } else {
+      // Regular character (including newlines inside quotes)
+      currentField += char
+    }
+  }
+
+  // Don't forget the last field and row
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField.trim())
+    if (currentRow.length > 0 && currentRow.some(f => f !== '')) {
+      rows.push(currentRow)
+    }
   }
 
   return rows
 }
 
-// Parse a single CSV line handling quoted values
-function parseCSVLine(line: string): string[] {
+// Parse just the first line of a CSV (for header validation)
+function parseCSVHeaderLine(csvContent: string): string[] {
+  const firstLineEnd = csvContent.indexOf('\n')
+  const firstLine = firstLineEnd === -1 ? csvContent : csvContent.substring(0, firstLineEnd)
+  // Simple parse for header line (headers shouldn't have embedded newlines)
   const result: string[] = []
   let current = ''
   let inQuotes = false
 
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i]
-
+  for (let i = 0; i < firstLine.length; i++) {
+    const char = firstLine[i]
     if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        // Escaped quote
-        current += '"'
-        i++
-      } else {
-        inQuotes = !inQuotes
-      }
+      inQuotes = !inQuotes
     } else if (char === ',' && !inQuotes) {
       result.push(current.trim())
       current = ''
-    } else {
+    } else if (char !== '\r') {
       current += char
     }
   }
-
   result.push(current.trim())
   return result
 }
@@ -295,7 +349,7 @@ export function validateCSVFiles(
   const errors: string[] = []
 
   // Check rounds.csv
-  const roundHeaders = parseCSVLine(roundsCSV.split('\n')[0] || '')
+  const roundHeaders = parseCSVHeaderLine(roundsCSV.split('\n')[0] || '')
   const requiredRoundHeaders = ['ID', 'Name']
   for (const header of requiredRoundHeaders) {
     if (!roundHeaders.includes(header)) {
@@ -304,7 +358,7 @@ export function validateCSVFiles(
   }
 
   // Check submissions.csv
-  const submissionHeaders = parseCSVLine(submissionsCSV.split('\n')[0] || '')
+  const submissionHeaders = parseCSVHeaderLine(submissionsCSV.split('\n')[0] || '')
   const requiredSubmissionHeaders = ['Spotify URI', 'Title', 'Artist(s)', 'Submitter ID', 'Round ID']
   for (const header of requiredSubmissionHeaders) {
     if (!submissionHeaders.includes(header)) {
@@ -313,7 +367,7 @@ export function validateCSVFiles(
   }
 
   // Check competitors.csv
-  const competitorHeaders = parseCSVLine(competitorsCSV.split('\n')[0] || '')
+  const competitorHeaders = parseCSVHeaderLine(competitorsCSV.split('\n')[0] || '')
   const requiredCompetitorHeaders = ['ID', 'Name']
   for (const header of requiredCompetitorHeaders) {
     if (!competitorHeaders.includes(header)) {
@@ -322,7 +376,7 @@ export function validateCSVFiles(
   }
 
   // Check votes.csv
-  const voteHeaders = parseCSVLine(votesCSV.split('\n')[0] || '')
+  const voteHeaders = parseCSVHeaderLine(votesCSV.split('\n')[0] || '')
   const requiredVoteHeaders = ['Spotify URI', 'Points Assigned', 'Round ID']
   for (const header of requiredVoteHeaders) {
     if (!voteHeaders.includes(header)) {
