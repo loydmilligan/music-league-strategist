@@ -34,6 +34,16 @@ function generateSongId(): string {
   return `song-${Math.random().toString(36).slice(2, 11)}`
 }
 
+// Check if two songs are the same (by title + artist, case-insensitive)
+function isSameSong(a: { title: string; artist: string }, b: { title: string; artist: string }): boolean {
+  return a.title.toLowerCase().trim() === b.title.toLowerCase().trim() &&
+         a.artist.toLowerCase().trim() === b.artist.toLowerCase().trim()
+}
+
+// Check if a song exists in an array of songs
+function songExistsIn(song: { title: string; artist: string }, songs: Array<{ title: string; artist: string }>): boolean {
+  return songs.some(s => isSameSong(s, song))
+}
 
 // Generate a title from the raw theme text
 function generateThemeTitle(rawTheme: string): string {
@@ -433,6 +443,12 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
               return t
             }
 
+            // Check for duplicates in target tier (by title + artist)
+            if (songExistsIn(song, currentTierSongs)) {
+              console.warn(`Song already exists in ${toTier}:`, song.title, '-', song.artist)
+              return t
+            }
+
             // Create updated song with promotion record
             const existingHistory = Array.isArray(song.promotionHistory) ? song.promotionHistory : []
             const promotedSong: Song = {
@@ -482,6 +498,17 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             else if (t.finalists.some((s) => s.id === song.id)) fromTier = 'finalists'
             else if (t.semifinalists.some((s) => s.id === song.id)) fromTier = 'semifinalists'
             else if (t.candidates.some((s) => s.id === song.id)) fromTier = 'candidates'
+
+            // Check for duplicates in target tier (by title + artist)
+            const targetTierSongs =
+              toTier === 'finalists' ? t.finalists :
+              toTier === 'semifinalists' ? t.semifinalists :
+              t.candidates
+
+            if (songExistsIn(song, targetTierSongs)) {
+              console.warn(`Song already exists in ${toTier}:`, song.title, '-', song.artist)
+              return t
+            }
 
             // Create updated song with demotion record
             const existingHistory = Array.isArray(song.promotionHistory) ? song.promotionHistory : []
@@ -690,16 +717,24 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
       },
 
       setWorkingCandidates: (songs) => {
-        // Assign IDs to songs that don't have them
-        const songsWithIds = songs.map((song) => ({
-          ...song,
-          id: song.id || generateSongId(),
-        }))
+        // Deduplicate incoming songs by title + artist
+        const seen = new Set<string>()
+        const deduplicatedSongs: Song[] = []
+        for (const song of songs) {
+          const key = `${song.title.toLowerCase().trim()}:${song.artist.toLowerCase().trim()}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            deduplicatedSongs.push({
+              ...song,
+              id: song.id || generateSongId(),
+            })
+          }
+        }
 
         set((state) => ({
           sessions: state.sessions.map((s) =>
             s.id === state.activeSessionId
-              ? { ...s, workingCandidates: songsWithIds, candidates: songsWithIds, updatedAt: Date.now() }
+              ? { ...s, workingCandidates: deduplicatedSongs, candidates: deduplicatedSongs, updatedAt: Date.now() }
               : s
           ),
         }))
@@ -801,20 +836,26 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
       addToConversation: (role, content) => {
         set((state) => ({
-          sessions: state.sessions.map((s) =>
-            s.id === state.activeSessionId
-              ? {
-                  ...s,
-                  conversationHistory: [
-                    ...s.conversationHistory,
-                    { role, content, timestamp: Date.now() },
-                  ],
-                  updatedAt: Date.now(),
-                }
-              : s
-          ),
-        }))
+          sessions: state.sessions.map((s) => {
+            if (s.id !== state.activeSessionId) return s
 
+            // Check if last message is duplicate (same role and content)
+            const lastMessage = s.conversationHistory[s.conversationHistory.length - 1]
+            if (lastMessage && lastMessage.role === role && lastMessage.content === content) {
+              console.warn('Duplicate message prevented:', role, content.substring(0, 50))
+              return s
+            }
+
+            return {
+              ...s,
+              conversationHistory: [
+                ...s.conversationHistory,
+                { role, content, timestamp: Date.now() },
+              ],
+              updatedAt: Date.now(),
+            }
+          }),
+        }))
       },
 
       clearConversation: () => {
@@ -1207,6 +1248,14 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
       // === Songs I Like Collection (Feature 6) ===
       addToSongsILike: (song: Song, tags?: string[], notes?: string, sourceThemeId?: string) => {
+        const state = get()
+
+        // Check if song already exists in Songs I Like
+        if (songExistsIn(song, state.songsILike)) {
+          console.warn('Song already exists in Songs I Like:', song.title, '-', song.artist)
+          return
+        }
+
         const savedSong: SavedSong = {
           ...song,
           id: song.id || generateSongId(),

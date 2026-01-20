@@ -153,11 +153,18 @@ export function useServerSync() {
       if (competitorData && setCompetitorAnalysis) setCompetitorAnalysis(competitorData)
 
       // Update settings store with server settings
+      // Only overwrite if server has actual values (not empty strings)
       if (settings) {
         if (settings.openRouterKey) setOpenRouterKey(settings.openRouterKey)
         if (settings.defaultModel) setDefaultModel(settings.defaultModel)
-        if (settings.spotify) setSpotify(settings.spotify)
-        if (settings.youtubeMusic) setYoutubeMusic(settings.youtubeMusic)
+        // Only sync spotify if server has actual credentials
+        if (settings.spotify?.clientId && settings.spotify?.refreshToken) {
+          setSpotify(settings.spotify)
+        }
+        // Only sync youtube if server has actual credentials
+        if (settings.youtubeMusic?.clientId && settings.youtubeMusic?.refreshToken) {
+          setYoutubeMusic(settings.youtubeMusic)
+        }
         if (settings.ntfy) setNtfy(settings.ntfy)
       }
 
@@ -317,16 +324,19 @@ export function useSettingsSync() {
     try {
       const serverSettings = await api.getSettings()
       // Update local store with server settings
+      // Only overwrite if server has actual values (not empty strings)
       if (serverSettings.openRouterKey) {
         settings.setOpenRouterKey(serverSettings.openRouterKey)
       }
       if (serverSettings.defaultModel) {
         settings.setDefaultModel(serverSettings.defaultModel)
       }
-      if (serverSettings.spotify) {
+      // Only sync spotify if server has actual credentials
+      if (serverSettings.spotify?.clientId && serverSettings.spotify?.refreshToken) {
         settings.setSpotify(serverSettings.spotify)
       }
-      if (serverSettings.youtubeMusic) {
+      // Only sync youtube if server has actual credentials
+      if (serverSettings.youtubeMusic?.clientId && serverSettings.youtubeMusic?.refreshToken) {
         settings.setYoutubeMusic(serverSettings.youtubeMusic)
       }
       if (serverSettings.ntfy) {

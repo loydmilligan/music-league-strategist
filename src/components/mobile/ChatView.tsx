@@ -55,6 +55,7 @@ export function ChatView({
   const [showWorkingSet, setShowWorkingSet] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const sendingRef = useRef(false) // Prevent double-sends
 
   // Store state
   const {
@@ -169,7 +170,9 @@ export function ChatView({
 
   // Main send handler
   const handleSend = useCallback(async () => {
-    if (!input.trim() || isProcessing) return
+    // Immediate guard using ref to prevent double-sends
+    if (!input.trim() || isProcessing || sendingRef.current) return
+    sendingRef.current = true
 
     const userMessage = input.trim()
     setInput('')
@@ -177,6 +180,7 @@ export function ChatView({
 
     if (!openRouterKey) {
       setError('OpenRouter API key not configured. Add it in Settings.')
+      sendingRef.current = false
       return
     }
 
@@ -215,6 +219,7 @@ export function ChatView({
 
     if (!currentSession) {
       setError('Could not create session. Please try again.')
+      sendingRef.current = false
       return
     }
 
@@ -327,6 +332,7 @@ export function ChatView({
       addToConversation('system', `Error: ${message}`)
     } finally {
       setProcessing(false)
+      sendingRef.current = false
     }
   }, [
     input, isProcessing, session, theme, openRouterKey, userProfile, candidates,
