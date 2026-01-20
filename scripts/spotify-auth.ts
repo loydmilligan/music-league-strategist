@@ -128,7 +128,7 @@ async function getAuthorizationCodeBrowser(): Promise<string> {
     await page.waitForURL(url => url.toString().startsWith(REDIRECT_URI!), {
       timeout: 120000,  // 2 minute timeout for user to log in
     })
-  } catch (error) {
+  } catch {
     // Even if page fails to load, check if we got redirected with a code
     const currentUrl = page.url()
     if (!currentUrl.startsWith(REDIRECT_URI!)) {
