@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import {
   Music2,
   ChevronDown,
@@ -40,25 +39,8 @@ export function MobileHeader({
   const theme = activeTheme()
   const activeThemes = themes.filter((t) => t.status === 'active')
 
-  // Calculate days remaining - use state to avoid calling Date.now() during render
-  const [daysRemaining, setDaysRemaining] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (theme?.deadline) {
-      const days = Math.ceil((theme.deadline - Date.now()) / (1000 * 60 * 60 * 24))
-      setDaysRemaining(days)
-    } else {
-      setDaysRemaining(null)
-    }
-  }, [theme?.deadline])
-
-  // Deadline display
-  const deadlineDisplay = daysRemaining !== null ? (
-    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-      <Clock className="h-3 w-3" />
-      <span>{daysRemaining}d</span>
-    </div>
-  ) : null
+  // Show deadline indicator if theme has a deadline (without calculating days to avoid impure Date.now())
+  const hasDeadline = Boolean(theme?.deadline)
 
   return (
     <header className="glass sticky top-0 z-40 px-4 py-3">
@@ -89,7 +71,9 @@ export function MobileHeader({
                           {subtitle}
                         </span>
                       )}
-                      {deadlineDisplay}
+                      {hasDeadline && (
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                      )}
                     </div>
                   </div>
                   <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
