@@ -1,4 +1,4 @@
-import { Plus, MessageSquare } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -6,7 +6,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import { cn } from '@/lib/utils'
@@ -21,16 +20,9 @@ export function SessionManager({ className }: SessionManagerProps): React.ReactE
     activeSessionId,
     getThemeSessions,
     resumeSession,
-    createSessionForTheme,
   } = useMusicLeagueStore()
 
   const sessions = activeThemeId ? getThemeSessions(activeThemeId) : []
-
-  const handleNewSession = (): void => {
-    if (activeThemeId) {
-      createSessionForTheme(activeThemeId)
-    }
-  }
 
   const formatSessionTime = (timestamp: number | string | undefined): string => {
     if (!timestamp) return ''
@@ -81,17 +73,6 @@ export function SessionManager({ className }: SessionManagerProps): React.ReactE
           )}
         </SelectContent>
       </Select>
-
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-8 w-8"
-        onClick={handleNewSession}
-        disabled={!activeThemeId}
-        title="New Session"
-      >
-        <Plus className="h-4 w-4" />
-      </Button>
     </div>
   )
 }

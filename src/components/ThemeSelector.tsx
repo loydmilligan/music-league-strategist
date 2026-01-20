@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, Archive, CheckCircle, Calendar, Pencil, Check, X } from 'lucide-react'
+import { Archive, CheckCircle, Calendar, Pencil, Check, X } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -23,7 +23,6 @@ import { DeadlineIndicator } from '@/components/DeadlineIndicator'
 import { PhaseBadge } from '@/components/PhaseProgressBar'
 
 interface ThemeSelectorProps {
-  onNewTheme?: () => void
   className?: string
 }
 
@@ -64,8 +63,8 @@ function parseDateTimeInput(value: string): number | undefined {
   return new Date(value).getTime()
 }
 
-export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): React.ReactElement {
-  const { themes, activeThemeId, setActiveTheme, createTheme, setThemeDeadline, activeTheme, updateTheme } = useMusicLeagueStore()
+export function ThemeSelector({ className }: ThemeSelectorProps): React.ReactElement {
+  const { themes, activeThemeId, setActiveTheme, setThemeDeadline, activeTheme, updateTheme } = useMusicLeagueStore()
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -106,16 +105,6 @@ export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): Re
       handleSaveEdit()
     } else if (e.key === 'Escape') {
       handleCancelEdit()
-    }
-  }
-
-  const handleNewTheme = (): void => {
-    if (onNewTheme) {
-      onNewTheme()
-    } else {
-      // Create a new theme with a placeholder - user will enter the actual theme
-      const id = createTheme('New Theme')
-      setActiveTheme(id)
     }
   }
 
@@ -271,16 +260,6 @@ export function ThemeSelector({ onNewTheme, className }: ThemeSelectorProps): Re
       {currentTheme?.phase && currentTheme.phase !== 'idle' && (
         <PhaseBadge phase={currentTheme.phase} />
       )}
-
-      <Button
-        variant="outline"
-        size="icon"
-        className="h-8 w-8"
-        onClick={handleNewTheme}
-        title="New Theme"
-      >
-        <Plus className="h-4 w-4" />
-      </Button>
     </div>
   )
 }

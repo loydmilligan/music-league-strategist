@@ -36,6 +36,7 @@ import type { AIConversationResponse, Song, RejectedSong, SessionPreference, Lon
 import { cn } from '@/lib/utils'
 import { ThemeSelector } from './ThemeSelector'
 import { SessionManager } from './SessionManager'
+import { NewConversationButton } from './NewConversationButton'
 import { FunnelVisualization, FunnelSummary } from './FunnelVisualization'
 import { PlaylistSyncPanel } from './PlaylistSyncPanel'
 import { SongDetailSlideout } from './SongDetailSlideout'
@@ -711,6 +712,7 @@ export function MusicLeagueStrategist(): React.ReactElement {
         <div className="flex flex-wrap items-center gap-2">
           <ThemeSelector />
           <SessionManager />
+          <NewConversationButton />
 
           {/* Model selector */}
           <Select
