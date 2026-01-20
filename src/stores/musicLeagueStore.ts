@@ -434,11 +434,12 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             }
 
             // Create updated song with promotion record
+            const existingHistory = Array.isArray(song.promotionHistory) ? song.promotionHistory : []
             const promotedSong: Song = {
               ...song,
               currentTier: toTier,
               promotionHistory: [
-                ...(song.promotionHistory || []),
+                ...existingHistory,
                 { fromTier, toTier, reason, timestamp: Date.now() },
               ],
             }
@@ -483,11 +484,12 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
             else if (t.candidates.some((s) => s.id === song.id)) fromTier = 'candidates'
 
             // Create updated song with demotion record
+            const existingHistory = Array.isArray(song.promotionHistory) ? song.promotionHistory : []
             const demotedSong: Song = {
               ...song,
               currentTier: toTier,
               promotionHistory: [
-                ...(song.promotionHistory || []),
+                ...existingHistory,
                 { fromTier, toTier, reason, timestamp: Date.now() },
               ],
             }
@@ -1282,13 +1284,18 @@ export const useMusicLeagueStore = create<MusicLeagueState>()(
 
       // === Server Sync Methods (PostgreSQL persistence) ===
       setThemesFromServer: (themes: MusicLeagueTheme[]) => {
+        // Helper to ensure song.promotionHistory is an array
+        const normalizeSong = (song: Song): Song => ({
+          ...song,
+          promotionHistory: Array.isArray(song.promotionHistory) ? song.promotionHistory : [],
+        })
         // Ensure all theme arrays are properly initialized
         const normalizedThemes = themes.map((t) => ({
           ...t,
-          candidates: t.candidates || [],
-          semifinalists: t.semifinalists || [],
-          finalists: t.finalists || [],
-          pick: t.pick || null,
+          candidates: (t.candidates || []).map(normalizeSong),
+          semifinalists: (t.semifinalists || []).map(normalizeSong),
+          finalists: (t.finalists || []).map(normalizeSong),
+          pick: t.pick ? normalizeSong(t.pick) : null,
         }))
         set((state) => ({
           themes: normalizedThemes,

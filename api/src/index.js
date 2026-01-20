@@ -530,7 +530,7 @@ api.put('/themes/:id', async (req, res) => {
           song.userNotes,
           song.ratings,
           song.aiDescription,
-          song.promotionHistory || [],
+          JSON.stringify(Array.isArray(song.promotionHistory) ? song.promotionHistory : []),
           now
         ])
 
@@ -659,7 +659,7 @@ api.post('/themes/:themeId/songs', async (req, res) => {
       song.userNotes,
       song.ratings,
       song.aiDescription,
-      song.promotionHistory || [],
+      JSON.stringify(Array.isArray(song.promotionHistory) ? song.promotionHistory : []),
       now
     ])
 
@@ -699,7 +699,7 @@ api.post('/themes/:themeId/songs', async (req, res) => {
       userNotes: row.user_notes,
       ratings: row.ratings,
       aiDescription: row.ai_description,
-      promotionHistory: row.promotion_history,
+      promotionHistory: row.promotion_history || [],
       currentTier: tier,
     })
   } catch (error) {
@@ -789,7 +789,7 @@ api.put('/themes/:themeId/songs/:songId', async (req, res) => {
       userNotes: row.user_notes,
       ratings: row.ratings,
       aiDescription: row.ai_description,
-      promotionHistory: row.promotion_history,
+      promotionHistory: row.promotion_history || [],
       currentTier: tier,
     })
   } catch (error) {
