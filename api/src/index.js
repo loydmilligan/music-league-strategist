@@ -446,14 +446,17 @@ api.post('/themes', async (req, res) => {
   }
 })
 
-// Update theme
+// Update theme with funnel data
 api.put('/themes/:id', async (req, res) => {
+  const client = await pool.connect()
   try {
     const { id } = req.params
-    const { rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist } = req.body
+    const { rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist, candidates, semifinalists, finalists, pick } = req.body
     const now = Date.now()
 
-    const result = await pool.query(`
+    await client.query('BEGIN')
+
+    const result = await client.query(`
       UPDATE themes
       SET raw_theme = COALESCE($1, raw_theme),
           title = COALESCE($2, title),
@@ -470,13 +473,119 @@ api.put('/themes/:id', async (req, res) => {
     `, [rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist, now, id])
 
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK')
       return res.status(404).json({ error: 'Theme not found' })
     }
 
-    res.json(result.rows[0])
+    // Helper to save songs for a tier
+    const saveSongsForTier = async (songs, tier) => {
+      if (!songs) return
+
+      // Remove existing songs for this tier
+      await client.query('DELETE FROM theme_songs WHERE theme_id = $1 AND tier = $2', [id, tier])
+
+      for (let i = 0; i < songs.length; i++) {
+        const song = songs[i]
+        if (!song) continue
+
+        // Ensure song exists in songs table
+        await client.query(`
+          INSERT INTO songs (id, title, artist, album, year, genre, reason, question, youtube_video_id, youtube_url, spotify_track_id, spotify_uri, is_favorite, is_eliminated, is_muted, user_notes, ratings, ai_description, promotion_history, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title,
+            artist = EXCLUDED.artist,
+            album = EXCLUDED.album,
+            year = EXCLUDED.year,
+            genre = EXCLUDED.genre,
+            reason = EXCLUDED.reason,
+            question = EXCLUDED.question,
+            youtube_video_id = EXCLUDED.youtube_video_id,
+            youtube_url = EXCLUDED.youtube_url,
+            spotify_track_id = EXCLUDED.spotify_track_id,
+            spotify_uri = EXCLUDED.spotify_uri,
+            is_favorite = EXCLUDED.is_favorite,
+            is_eliminated = EXCLUDED.is_eliminated,
+            is_muted = EXCLUDED.is_muted,
+            user_notes = EXCLUDED.user_notes,
+            ratings = EXCLUDED.ratings,
+            ai_description = EXCLUDED.ai_description,
+            promotion_history = EXCLUDED.promotion_history
+        `, [
+          song.id,
+          song.title,
+          song.artist,
+          song.album,
+          song.year,
+          song.genre,
+          song.reason,
+          song.question,
+          song.youtubeVideoId,
+          song.youtubeUrl,
+          song.spotifyTrackId,
+          song.spotifyUri,
+          song.isFavorite || false,
+          song.isEliminated || false,
+          song.isMuted || false,
+          song.userNotes,
+          song.ratings,
+          song.aiDescription,
+          song.promotionHistory || [],
+          now
+        ])
+
+        // Link song to theme with tier
+        await client.query(`
+          INSERT INTO theme_songs (theme_id, song_id, tier, rank, added_at)
+          VALUES ($1, $2, $3, $4, $5)
+          ON CONFLICT (theme_id, song_id) DO UPDATE SET
+            tier = EXCLUDED.tier,
+            rank = EXCLUDED.rank
+        `, [id, song.id, tier, i, now])
+      }
+    }
+
+    // Save funnel data if provided
+    if (candidates !== undefined) {
+      await saveSongsForTier(candidates, 'candidates')
+    }
+    if (semifinalists !== undefined) {
+      await saveSongsForTier(semifinalists, 'semifinalists')
+    }
+    if (finalists !== undefined) {
+      await saveSongsForTier(finalists, 'finalists')
+    }
+    if (pick !== undefined) {
+      // Pick is a single song, not an array
+      await client.query('DELETE FROM theme_songs WHERE theme_id = $1 AND tier = $2', [id, 'pick'])
+      if (pick) {
+        await saveSongsForTier([pick], 'pick')
+      }
+    }
+
+    await client.query('COMMIT')
+
+    const row = result.rows[0]
+    res.json({
+      id: row.id,
+      rawTheme: row.raw_theme,
+      interpretation: row.interpretation,
+      strategy: row.strategy,
+      title: row.title,
+      status: row.status,
+      deadline: row.deadline ? Number(row.deadline) : null,
+      phase: row.phase,
+      hallPassesUsed: row.hall_passes_used,
+      spotifyPlaylist: row.spotify_playlist,
+      createdAt: Number(row.created_at),
+      updatedAt: Number(row.updated_at),
+    })
   } catch (error) {
+    await client.query('ROLLBACK')
     console.error('Error updating theme:', error)
     res.status(500).json({ error: 'Failed to update theme' })
+  } finally {
+    client.release()
   }
 })
 
