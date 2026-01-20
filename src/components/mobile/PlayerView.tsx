@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, memo } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react'
 import {
   Play,
   SkipForward,
@@ -122,14 +122,19 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
     }
   }, [isShuffled, currentPlaylist.length])
 
-  // Effect to handle initialSong
+  // Track if we've handled the initial song
+  const initialSongHandledRef = useRef(false)
+
+  // Effect to handle initialSong - use ref to only run once and schedule update
   useEffect(() => {
-    if (initialSong) {
+    if (initialSong && !initialSongHandledRef.current) {
       const index = currentPlaylist.findIndex(
         s => s.title === initialSong.title && s.artist === initialSong.artist
       )
       if (index >= 0) {
-        setCurrentSongIndex(index)
+        initialSongHandledRef.current = true
+        // Schedule state update to avoid synchronous setState in effect
+        queueMicrotask(() => setCurrentSongIndex(index))
       }
     }
   }, [initialSong, currentPlaylist])
