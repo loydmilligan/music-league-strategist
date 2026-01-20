@@ -1,102 +1,413 @@
+@import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  /* Dark theme (default) based on UI_UX.md design tokens */
+  /* Dark theme (default) - Warm, vinyl-inspired palette */
   :root {
-    --background: 0 0% 6%;
-    --foreground: 0 0% 100%;
-    --card: 0 0% 10%;
-    --card-foreground: 0 0% 100%;
-    --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 63%;
-    --accent: 217 91% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 17%;
-    --input: 0 0% 17%;
-    --ring: 217 91% 60%;
+    --background: 20 10% 5%;
+    --foreground: 40 20% 95%;
+    --card: 20 8% 9%;
+    --card-foreground: 40 20% 95%;
+    --popover: 20 8% 9%;
+    --popover-foreground: 40 20% 95%;
+
+    /* Warm amber primary */
+    --primary: 35 100% 50%;
+    --primary-foreground: 20 10% 5%;
+
+    --secondary: 20 8% 14%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 20 8% 14%;
+    --muted-foreground: 40 10% 55%;
+
+    /* Coral accent */
+    --accent: 15 90% 60%;
+    --accent-foreground: 20 10% 5%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 20% 95%;
+    --border: 20 8% 18%;
+    --input: 20 8% 18%;
+    --ring: 35 100% 50%;
 
     /* Status colors */
-    --success: 142 71% 45%;
-    --warning: 48 96% 53%;
-    --danger: 0 84% 60%;
+    --success: 150 60% 45%;
+    --warning: 35 100% 50%;
+    --danger: 0 72% 51%;
+
+    /* Funnel tier colors - gradient from gold to warm tones */
+    --tier-pick: 45 100% 55%;
+    --tier-finalists: 35 90% 50%;
+    --tier-semifinalists: 25 80% 50%;
+    --tier-candidates: 20 8% 30%;
 
     /* Border radius */
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     /* Chart colors */
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --chart-1: 35 100% 50%;
+    --chart-2: 150 60% 45%;
+    --chart-3: 15 90% 60%;
+    --chart-4: 200 80% 55%;
+    --chart-5: 280 70% 60%;
   }
 
-  /* Light theme */
+  /* Light theme - Cream paper with warm accents */
   .light {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 6%;
-    --card: 0 0% 96%;
-    --card-foreground: 0 0% 6%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 6%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 6%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 40%;
-    --accent: 221 83% 53%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 221 83% 53%;
-    --success: 142 76% 36%;
-    --warning: 45 93% 47%;
-    --danger: 0 72% 51%;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --background: 40 30% 96%;
+    --foreground: 20 20% 10%;
+    --card: 40 25% 92%;
+    --card-foreground: 20 20% 10%;
+    --popover: 40 30% 98%;
+    --popover-foreground: 20 20% 10%;
+
+    /* Deep amber primary */
+    --primary: 30 90% 45%;
+    --primary-foreground: 40 30% 98%;
+
+    --secondary: 40 20% 88%;
+    --secondary-foreground: 20 20% 10%;
+    --muted: 40 20% 88%;
+    --muted-foreground: 20 10% 40%;
+
+    /* Warm coral accent */
+    --accent: 15 80% 50%;
+    --accent-foreground: 40 30% 98%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 40 30% 98%;
+    --border: 40 15% 82%;
+    --input: 40 15% 82%;
+    --ring: 30 90% 45%;
+
+    --success: 150 55% 38%;
+    --warning: 35 90% 45%;
+    --danger: 0 72% 45%;
+
+    --tier-pick: 45 90% 45%;
+    --tier-finalists: 30 85% 45%;
+    --tier-semifinalists: 20 75% 45%;
+    --tier-candidates: 40 15% 60%;
+
+    --chart-1: 30 90% 45%;
+    --chart-2: 150 55% 38%;
+    --chart-3: 15 80% 50%;
+    --chart-4: 200 70% 45%;
+    --chart-5: 280 60% 50%;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    /* Prevent pull-to-refresh on PWA */
+    overscroll-behavior-y: contain;
+    /* Smooth scrolling */
+    scroll-behavior: smooth;
+    /* Better text rendering */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', system-ui, sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Safe area padding for PWA */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    /* Prevent text selection on touch */
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Display font for headers */
+  h1, h2, .font-display {
+    font-family: 'Archivo Black', Impact, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  /* Mono font */
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace;
   }
 }
 
-/* Scrollbar styles */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+@layer components {
+  /* Touch-friendly button base */
+  .btn-touch {
+    @apply min-h-touch min-w-touch flex items-center justify-center;
+    @apply active:scale-95 transition-transform duration-100;
+  }
+
+  /* Card with subtle texture */
+  .card-textured {
+    @apply relative overflow-hidden;
+    background: linear-gradient(
+      145deg,
+      hsl(var(--card)) 0%,
+      hsl(var(--card) / 0.95) 100%
+    );
+  }
+
+  .card-textured::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  /* Vinyl-inspired decorative element */
+  .vinyl-ring {
+    @apply rounded-full border-2 border-current;
+    background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      hsl(var(--primary) / 0.1) 90deg,
+      transparent 180deg,
+      hsl(var(--primary) / 0.1) 270deg,
+      transparent 360deg
+    );
+  }
+
+  /* Tier badge styles */
+  .tier-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold;
+    @apply transition-all duration-200;
+  }
+
+  .tier-badge-pick {
+    @apply bg-tier-pick/20 text-tier-pick border border-tier-pick/30;
+  }
+
+  .tier-badge-finalists {
+    @apply bg-tier-finalists/20 text-tier-finalists border border-tier-finalists/30;
+  }
+
+  .tier-badge-semifinalists {
+    @apply bg-tier-semifinalists/20 text-tier-semifinalists border border-tier-semifinalists/30;
+  }
+
+  .tier-badge-candidates {
+    @apply bg-tier-candidates/20 text-tier-candidates border border-tier-candidates/30;
+  }
+
+  /* Swipe action reveal */
+  .swipe-reveal {
+    @apply relative overflow-hidden;
+    touch-action: pan-y;
+  }
+
+  .swipe-reveal-content {
+    @apply transition-transform duration-200 ease-out;
+  }
+
+  /* Bottom navigation */
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-50;
+    @apply bg-background/80 backdrop-blur-xl;
+    @apply border-t border-border/50;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-background/60 backdrop-blur-xl;
+    @apply border border-border/50;
+  }
+
+  /* Glow effect on primary actions */
+  .glow-primary {
+    @apply shadow-glow;
+  }
+
+  .glow-primary:hover {
+    @apply shadow-glow-lg;
+  }
+
+  /* Song card for mobile */
+  .song-card {
+    @apply relative flex items-center gap-3 p-3 rounded-xl;
+    @apply bg-card border border-border/50;
+    @apply transition-all duration-200;
+    @apply active:scale-[0.98] active:bg-muted/50;
+  }
+
+  .song-card-selected {
+    @apply ring-2 ring-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* Floating action button */
+  .fab {
+    @apply fixed z-40;
+    @apply h-14 w-14 rounded-full;
+    @apply bg-primary text-primary-foreground;
+    @apply shadow-elevated;
+    @apply flex items-center justify-center;
+    @apply active:scale-90 transition-transform duration-100;
+    bottom: calc(80px + env(safe-area-inset-bottom));
+    right: 16px;
+  }
+
+  /* Progress ring (for funnel visualization) */
+  .progress-ring {
+    @apply relative inline-flex items-center justify-center;
+  }
+
+  .progress-ring-track {
+    @apply absolute inset-0 rounded-full;
+    background: conic-gradient(
+      hsl(var(--tier-pick)) var(--progress, 0%),
+      hsl(var(--muted)) var(--progress, 0%)
+    );
+  }
+
+  .progress-ring-inner {
+    @apply absolute inset-1 rounded-full bg-background;
+  }
+
+  /* Chat bubble */
+  .chat-bubble {
+    @apply relative px-4 py-3 rounded-2xl max-w-[85%];
+  }
+
+  .chat-bubble-user {
+    @apply bg-primary text-primary-foreground ml-auto;
+    @apply rounded-br-sm;
+  }
+
+  .chat-bubble-assistant {
+    @apply bg-muted text-foreground mr-auto;
+    @apply rounded-bl-sm;
+  }
+
+  /* Animated loading dots */
+  .loading-dots {
+    @apply flex gap-1;
+  }
+
+  .loading-dots span {
+    @apply w-2 h-2 rounded-full bg-current;
+    @apply animate-bounce;
+  }
+
+  .loading-dots span:nth-child(2) {
+    animation-delay: 0.1s;
+  }
+
+  .loading-dots span:nth-child(3) {
+    animation-delay: 0.2s;
+  }
 }
 
-::-webkit-scrollbar-track {
-  background: hsl(var(--background));
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Horizontal scroll snap */
+  .scroll-snap-x {
+    @apply overflow-x-auto;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scroll-snap-item {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  /* Safe area utilities */
+  .pt-safe {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  /* Text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary via-accent to-primary;
+  }
+
+  /* Truncate multiple lines */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 }
 
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
-  border-radius: 4px;
+/* Custom scrollbar styles for non-mobile */
+@media (hover: hover) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+/* PWA-specific styles */
+@media (display-mode: standalone) {
+  .pwa-hidden {
+    display: none !important;
+  }
+
+  /* Prevent text selection in PWA mode */
+  body {
+    user-select: none;
+  }
+
+  /* Allow text selection in specific areas */
+  input, textarea, [contenteditable="true"], .selectable {
+    user-select: text;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
