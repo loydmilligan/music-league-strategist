@@ -1917,6 +1917,138 @@ api.get('/has-data', async (req, res) => {
 })
 
 // ============================================================================
+// SPOTIFY OAUTH
+// ============================================================================
+
+const SPOTIFY_CLIENT_ID = process.env.VITE_SPOTIFY_CLIENT_ID
+const SPOTIFY_CLIENT_SECRET = process.env.VITE_SPOTIFY_CLIENT_SECRET
+const SPOTIFY_CALLBACK_URL = process.env.VITE_SPOTIFY_CALLBACK_URL || 'http://localhost:3000/api/ml/spotify/callback'
+
+const SPOTIFY_SCOPES = [
+  'playlist-read-private',
+  'playlist-read-collaborative',
+  'playlist-modify-public',
+  'playlist-modify-private',
+  'user-library-read',
+  'user-read-private',
+].join(' ')
+
+// Get Spotify authorization URL
+api.get('/spotify/auth-url', (req, res) => {
+  if (!SPOTIFY_CLIENT_ID) {
+    return res.status(500).json({ error: 'Spotify client ID not configured on server' })
+  }
+
+  const authUrl = new URL('https://accounts.spotify.com/authorize')
+  authUrl.searchParams.set('client_id', SPOTIFY_CLIENT_ID)
+  authUrl.searchParams.set('response_type', 'code')
+  authUrl.searchParams.set('redirect_uri', SPOTIFY_CALLBACK_URL)
+  authUrl.searchParams.set('scope', SPOTIFY_SCOPES)
+  authUrl.searchParams.set('show_dialog', 'true')
+
+  res.json({
+    url: authUrl.toString(),
+    callbackUrl: SPOTIFY_CALLBACK_URL,
+  })
+})
+
+// Exchange authorization code for tokens
+api.post('/spotify/exchange', async (req, res) => {
+  try {
+    const { code } = req.body
+
+    if (!code) {
+      return res.status(400).json({ error: 'Authorization code required' })
+    }
+
+    if (!SPOTIFY_CLIENT_ID || !SPOTIFY_CLIENT_SECRET) {
+      return res.status(500).json({ error: 'Spotify credentials not configured on server' })
+    }
+
+    const credentials = Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')
+
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${credentials}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        redirect_uri: SPOTIFY_CALLBACK_URL,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('Spotify token exchange failed:', errorText)
+      return res.status(response.status).json({ error: 'Token exchange failed', details: errorText })
+    }
+
+    const tokens = await response.json()
+
+    // Return only what the frontend needs
+    res.json({
+      refreshToken: tokens.refresh_token,
+      accessToken: tokens.access_token,
+      expiresIn: tokens.expires_in,
+    })
+  } catch (error) {
+    console.error('Error exchanging Spotify code:', error)
+    res.status(500).json({ error: 'Failed to exchange code for tokens' })
+  }
+})
+
+// Callback endpoint for OAuth redirect (HTML page that sends code to parent window)
+api.get('/spotify/callback', (req, res) => {
+  const { code, error } = req.query
+
+  // Return an HTML page that sends the code to the opener window
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Spotify Authorization</title>
+      <style>
+        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a1a; color: #fff; }
+        .container { text-align: center; padding: 2rem; }
+        .success { color: #1DB954; }
+        .error { color: #ff4444; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        ${error
+          ? `<h2 class="error">Authorization Failed</h2><p>${error}</p>`
+          : `<h2 class="success">Authorization Successful!</h2><p>You can close this window.</p>`
+        }
+      </div>
+      <script>
+        ${error
+          ? `window.opener?.postMessage({ type: 'spotify-auth-error', error: '${error}' }, '*');`
+          : `window.opener?.postMessage({ type: 'spotify-auth-success', code: '${code}' }, '*');`
+        }
+        setTimeout(() => window.close(), 2000);
+      </script>
+    </body>
+    </html>
+  `
+
+  res.type('html').send(html)
+})
+
+// Check if Spotify OAuth is configured on server
+api.get('/spotify/status', (req, res) => {
+  res.json({
+    configured: Boolean(SPOTIFY_CLIENT_ID && SPOTIFY_CLIENT_SECRET),
+    hasClientId: Boolean(SPOTIFY_CLIENT_ID),
+    hasClientSecret: Boolean(SPOTIFY_CLIENT_SECRET),
+    callbackUrl: SPOTIFY_CALLBACK_URL,
+  })
+})
+
+// ============================================================================
 // START SERVER
 // ============================================================================
 

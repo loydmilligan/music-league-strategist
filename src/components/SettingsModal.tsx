@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Settings, Eye, EyeOff, ExternalLink, Check, AlertCircle, Send } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Settings, Eye, EyeOff, ExternalLink, Check, AlertCircle, Send, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -60,6 +60,81 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
   const [localYouTube, setLocalYouTube] = useState(youtubeMusic)
   const [localNtfy, setLocalNtfy] = useState(ntfy)
   const [testingSendNotification, setTestingSendNotification] = useState(false)
+  const [spotifyAuthLoading, setSpotifyAuthLoading] = useState(false)
+  const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null)
+  const [spotifyServerConfigured, setSpotifyServerConfigured] = useState<boolean | null>(null)
+
+  // Check if server has Spotify OAuth configured
+  useEffect(() => {
+    fetch('/api/ml/spotify/status')
+      .then((res) => res.json())
+      .then((data) => setSpotifyServerConfigured(data.configured))
+      .catch(() => setSpotifyServerConfigured(false))
+  }, [])
+
+  // Handle Spotify OAuth popup message
+  const handleSpotifyMessage = useCallback(
+    async (event: MessageEvent) => {
+      if (event.data?.type === 'spotify-auth-success' && event.data.code) {
+        setSpotifyAuthLoading(true)
+        setSpotifyAuthError(null)
+        try {
+          const response = await fetch('/api/ml/spotify/exchange', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: event.data.code }),
+          })
+          if (!response.ok) {
+            const error = await response.json()
+            throw new Error(error.error || 'Token exchange failed')
+          }
+          const tokens = await response.json()
+          setLocalSpotify((prev) => ({
+            ...prev,
+            refreshToken: tokens.refreshToken,
+          }))
+          setSpotifyAuthError(null)
+        } catch (error) {
+          setSpotifyAuthError(error instanceof Error ? error.message : 'OAuth failed')
+        } finally {
+          setSpotifyAuthLoading(false)
+        }
+      } else if (event.data?.type === 'spotify-auth-error') {
+        setSpotifyAuthError(event.data.error || 'Authorization failed')
+      }
+    },
+    []
+  )
+
+  useEffect(() => {
+    window.addEventListener('message', handleSpotifyMessage)
+    return () => window.removeEventListener('message', handleSpotifyMessage)
+  }, [handleSpotifyMessage])
+
+  const handleSpotifyConnect = async (): Promise<void> => {
+    setSpotifyAuthLoading(true)
+    setSpotifyAuthError(null)
+    try {
+      const response = await fetch('/api/ml/spotify/auth-url')
+      if (!response.ok) {
+        throw new Error('Failed to get authorization URL')
+      }
+      const { url } = await response.json()
+      // Open OAuth popup
+      const width = 500
+      const height = 700
+      const left = window.screenX + (window.outerWidth - width) / 2
+      const top = window.screenY + (window.outerHeight - height) / 2
+      window.open(
+        url,
+        'spotify-auth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      )
+    } catch (error) {
+      setSpotifyAuthError(error instanceof Error ? error.message : 'Failed to start OAuth')
+      setSpotifyAuthLoading(false)
+    }
+  }
 
   // Sync local state with store when modal opens
   useEffect(() => {
@@ -265,15 +340,42 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
                   <Label htmlFor="spotify-refresh-token" className="text-xs">
                     Refresh Token
                   </Label>
-                  <Input
-                    id="spotify-refresh-token"
-                    type="password"
-                    value={localSpotify.refreshToken}
-                    onChange={(e) =>
-                      setLocalSpotify({ ...localSpotify, refreshToken: e.target.value })
-                    }
-                    placeholder="Enter Spotify Refresh Token"
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="spotify-refresh-token"
+                      type="password"
+                      value={localSpotify.refreshToken}
+                      onChange={(e) =>
+                        setLocalSpotify({ ...localSpotify, refreshToken: e.target.value })
+                      }
+                      placeholder={spotifyServerConfigured ? "Or use Connect button →" : "Enter Spotify Refresh Token"}
+                      className="flex-1"
+                    />
+                    {spotifyServerConfigured && (
+                      <Button
+                        type="button"
+                        variant={localSpotify.refreshToken ? "outline" : "default"}
+                        size="sm"
+                        onClick={handleSpotifyConnect}
+                        disabled={spotifyAuthLoading}
+                        className="whitespace-nowrap"
+                      >
+                        {spotifyAuthLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                            Connecting...
+                          </>
+                        ) : localSpotify.refreshToken ? (
+                          'Reconnect'
+                        ) : (
+                          'Connect'
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  {spotifyAuthError && (
+                    <p className="text-xs text-red-500">{spotifyAuthError}</p>
+                  )}
                 </div>
 
                 <a
@@ -284,6 +386,11 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
                 >
                   Spotify API Setup Guide <ExternalLink className="h-3 w-3" />
                 </a>
+                {spotifyServerConfigured === false && (
+                  <p className="text-xs text-muted-foreground">
+                    Tip: Set VITE_SPOTIFY_CLIENT_ID and VITE_SPOTIFY_CLIENT_SECRET on the server to enable one-click Connect.
+                  </p>
+                )}
               </div>
             </div>
 

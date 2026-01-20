@@ -28,6 +28,10 @@ services:
       - DB_NAME=${POSTGRES_DB:-mlstrategist}
       - DB_USER=${POSTGRES_USER:-mlstrategist}
       - DB_PASSWORD=${POSTGRES_PASSWORD:-mlstrategist-secret}
+      # Spotify OAuth (optional - set in .env for one-click Connect)
+      - VITE_SPOTIFY_CLIENT_ID=${VITE_SPOTIFY_CLIENT_ID:-}
+      - VITE_SPOTIFY_CLIENT_SECRET=${VITE_SPOTIFY_CLIENT_SECRET:-}
+      - VITE_SPOTIFY_CALLBACK_URL=${VITE_SPOTIFY_CALLBACK_URL:-}
     depends_on:
       postgres:
         condition: service_healthy
