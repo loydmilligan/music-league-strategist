@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   User,
   Heart,
@@ -8,10 +9,12 @@ import {
   ChevronRight,
   Music2,
   Calendar,
-  Trophy
+  Trophy,
+  LogOut
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
+import { useAuthStore } from '@/stores/authStore'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { SongsILikePanel } from '@/components/SongsILikePanel'
@@ -20,15 +23,22 @@ import { SettingsModal } from '@/components/SettingsModal'
 import { HelpModal } from '@/components/HelpModal'
 
 export function ProfileView(): React.ReactElement {
+  const navigate = useNavigate()
   const [likedSongsOpen, setLikedSongsOpen] = useState(false)
   const [competitorOpen, setCompetitorOpen] = useState(false)
 
+  const { user, logout } = useAuthStore()
   const {
     themes,
     songsILike,
     userProfile,
     competitorAnalysis,
   } = useMusicLeagueStore()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
 
   // Stats calculations
   const activeThemes = themes.filter(t => t.status === 'active').length
@@ -113,10 +123,10 @@ export function ProfileView(): React.ReactElement {
           <div className="h-16 w-16 rounded-2xl bg-primary/20 flex items-center justify-center">
             <User className="h-8 w-8 text-primary" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="font-display text-xl">Your Profile</h2>
-            <p className="text-sm text-muted-foreground">
-              Music League Strategist
+            <p className="text-sm text-muted-foreground truncate">
+              {user?.email || 'Music League Strategist'}
             </p>
           </div>
         </div>
@@ -211,6 +221,25 @@ export function ProfileView(): React.ReactElement {
                 </button>
               }
             />
+
+            {/* Logout Button */}
+            <button
+              onClick={handleLogout}
+              className={cn(
+                'w-full flex items-center gap-4 p-4 rounded-xl mt-2',
+                'bg-card border border-destructive/20',
+                'transition-all duration-200',
+                'active:scale-[0.98] active:bg-destructive/10'
+              )}
+            >
+              <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+                <LogOut className="h-5 w-5 text-destructive" />
+              </div>
+              <div className="flex-1 text-left">
+                <p className="font-medium text-destructive">Sign Out</p>
+                <p className="text-xs text-muted-foreground">Log out of your account</p>
+              </div>
+            </button>
           </div>
         </div>
       </ScrollArea>

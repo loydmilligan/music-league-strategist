@@ -2,8 +2,59 @@ import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
 import crypto from 'crypto'
+import bcrypt from 'bcrypt'
+import jwt from 'jsonwebtoken'
+import nodemailer from 'nodemailer'
+import { v4 as uuidv4 } from 'uuid'
 
 const { Pool } = pg
+
+// ============================================================================
+// AUTH CONFIGURATION
+// ============================================================================
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production'
+const JWT_ACCESS_EXPIRES = process.env.JWT_ACCESS_EXPIRES || '15m'
+const JWT_REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES || '7d'
+const APP_URL = process.env.APP_URL || 'http://localhost:5173'
+
+// Email configuration (Gmail SMTP)
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+})
+
+const SMTP_FROM = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@example.com'
+
+// Email sending helper
+async function sendEmail(to, subject, html) {
+  // If SMTP is not configured, log the email instead of sending
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log('=== EMAIL (SMTP not configured) ===')
+    console.log('To:', to)
+    console.log('Subject:', subject)
+    console.log('Body:', html)
+    console.log('===================================')
+    return { messageId: 'test-' + Date.now() }
+  }
+
+  return emailTransporter.sendMail({
+    from: SMTP_FROM,
+    to,
+    subject,
+    html,
+  })
+}
+
+// Generate random token for email verification/password reset
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex')
+}
 
 // Helper to generate UUID
 function generateUUID() {
@@ -64,9 +115,546 @@ app.use(express.json({ limit: '10mb' }))
 const api = express.Router()
 app.use('/api/ml', api)
 
+// Auth router (separate for clarity)
+const authRouter = express.Router()
+api.use('/auth', authRouter)
+
+// ============================================================================
+// AUTH MIDDLEWARE
+// ============================================================================
+
+// Middleware to verify JWT token and attach user to request
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1] // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' })
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ error: 'Invalid or expired token' })
+    }
+    req.user = user
+    next()
+  })
+}
+
+// Optional auth middleware - attaches user if token present, but doesn't require it
+function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (!err) {
+        req.user = user
+      }
+    })
+  }
+  next()
+}
+
 // Health check
 api.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
+})
+
+// ============================================================================
+// AUTH ENDPOINTS
+// ============================================================================
+
+// Register new user
+authRouter.post('/register', async (req, res) => {
+  const { email, password } = req.body
+
+  // Validation
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' })
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Invalid email format' })
+  }
+
+  try {
+    // Check if email already exists
+    const existingUser = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    )
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ error: 'Email already registered' })
+    }
+
+    // Hash password
+    const saltRounds = 10
+    const passwordHash = await bcrypt.hash(password, saltRounds)
+
+    // Generate verification token
+    const verificationToken = generateToken()
+    const verificationExpires = Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+
+    // Create user
+    const result = await pool.query(
+      `INSERT INTO users (email, password_hash, email_verification_token, email_verification_expires, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $5)
+       RETURNING id, email, email_verified, created_at`,
+      [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, Date.now()]
+    )
+
+    const user = result.rows[0]
+
+    // Send verification email
+    const verifyUrl = `${APP_URL}/verify-email/${verificationToken}`
+    await sendEmail(
+      user.email,
+      'Verify your email - Music League Strategist',
+      `
+        <h2>Welcome to Music League Strategist!</h2>
+        <p>Please verify your email address by clicking the link below:</p>
+        <p><a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #7c3aed; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a></p>
+        <p>Or copy this link: ${verifyUrl}</p>
+        <p>This link will expire in 24 hours.</p>
+      `
+    )
+
+    res.status(201).json({
+      message: 'Registration successful. Please check your email to verify your account.',
+      user: {
+        id: user.id,
+        email: user.email,
+        emailVerified: user.email_verified
+      }
+    })
+  } catch (error) {
+    console.error('Registration error:', error)
+    res.status(500).json({ error: 'Registration failed' })
+  }
+})
+
+// Verify email
+authRouter.get('/verify-email/:token', async (req, res) => {
+  const { token } = req.params
+
+  try {
+    const result = await pool.query(
+      `UPDATE users
+       SET email_verified = true, email_verification_token = null, email_verification_expires = null, updated_at = $1
+       WHERE email_verification_token = $2 AND email_verification_expires > $1
+       RETURNING id, email`,
+      [Date.now(), token]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired verification token' })
+    }
+
+    res.json({ message: 'Email verified successfully. You can now log in.' })
+  } catch (error) {
+    console.error('Email verification error:', error)
+    res.status(500).json({ error: 'Verification failed' })
+  }
+})
+
+// Resend verification email
+authRouter.post('/resend-verification', async (req, res) => {
+  const { email } = req.body
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' })
+  }
+
+  try {
+    // Find user
+    const userResult = await pool.query(
+      'SELECT id, email, email_verified FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    )
+
+    if (userResult.rows.length === 0) {
+      // Don't reveal if email exists
+      return res.json({ message: 'If the email exists, a verification link has been sent.' })
+    }
+
+    const user = userResult.rows[0]
+
+    if (user.email_verified) {
+      return res.status(400).json({ error: 'Email is already verified' })
+    }
+
+    // Generate new verification token
+    const verificationToken = generateToken()
+    const verificationExpires = Date.now() + (24 * 60 * 60 * 1000)
+
+    await pool.query(
+      `UPDATE users SET email_verification_token = $1, email_verification_expires = $2, updated_at = $3 WHERE id = $4`,
+      [verificationToken, verificationExpires, Date.now(), user.id]
+    )
+
+    // Send verification email
+    const verifyUrl = `${APP_URL}/verify-email/${verificationToken}`
+    await sendEmail(
+      user.email,
+      'Verify your email - Music League Strategist',
+      `
+        <h2>Email Verification</h2>
+        <p>Please verify your email address by clicking the link below:</p>
+        <p><a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #7c3aed; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a></p>
+        <p>Or copy this link: ${verifyUrl}</p>
+        <p>This link will expire in 24 hours.</p>
+      `
+    )
+
+    res.json({ message: 'If the email exists, a verification link has been sent.' })
+  } catch (error) {
+    console.error('Resend verification error:', error)
+    res.status(500).json({ error: 'Failed to resend verification' })
+  }
+})
+
+// Login
+authRouter.post('/login', async (req, res) => {
+  const { email, password } = req.body
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' })
+  }
+
+  try {
+    // Find user
+    const result = await pool.query(
+      'SELECT id, email, password_hash, email_verified FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid email or password' })
+    }
+
+    const user = result.rows[0]
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password_hash)
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid email or password' })
+    }
+
+    // Check if email is verified
+    if (!user.email_verified) {
+      return res.status(403).json({
+        error: 'Email not verified',
+        code: 'EMAIL_NOT_VERIFIED'
+      })
+    }
+
+    // Generate access token
+    const accessToken = jwt.sign(
+      { userId: user.id, email: user.email },
+      JWT_SECRET,
+      { expiresIn: JWT_ACCESS_EXPIRES }
+    )
+
+    // Generate refresh token
+    const refreshToken = generateToken()
+    const refreshExpires = Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days
+
+    // Store refresh token
+    await pool.query(
+      `INSERT INTO user_sessions (user_id, refresh_token, expires_at, created_at)
+       VALUES ($1, $2, $3, $4)`,
+      [user.id, refreshToken, refreshExpires, Date.now()]
+    )
+
+    res.json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        emailVerified: user.email_verified
+      }
+    })
+  } catch (error) {
+    console.error('Login error:', error)
+    res.status(500).json({ error: 'Login failed' })
+  }
+})
+
+// Logout
+authRouter.post('/logout', authenticateToken, async (req, res) => {
+  const { refreshToken } = req.body
+
+  try {
+    if (refreshToken) {
+      // Delete specific session
+      await pool.query(
+        'DELETE FROM user_sessions WHERE user_id = $1 AND refresh_token = $2',
+        [req.user.userId, refreshToken]
+      )
+    } else {
+      // Delete all sessions for user (logout from all devices)
+      await pool.query(
+        'DELETE FROM user_sessions WHERE user_id = $1',
+        [req.user.userId]
+      )
+    }
+
+    res.json({ message: 'Logged out successfully' })
+  } catch (error) {
+    console.error('Logout error:', error)
+    res.status(500).json({ error: 'Logout failed' })
+  }
+})
+
+// Refresh access token
+authRouter.post('/refresh-token', async (req, res) => {
+  const { refreshToken } = req.body
+
+  if (!refreshToken) {
+    return res.status(400).json({ error: 'Refresh token is required' })
+  }
+
+  try {
+    // Find valid session
+    const sessionResult = await pool.query(
+      `SELECT us.*, u.email, u.email_verified
+       FROM user_sessions us
+       JOIN users u ON us.user_id = u.id
+       WHERE us.refresh_token = $1 AND us.expires_at > $2`,
+      [refreshToken, Date.now()]
+    )
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid or expired refresh token' })
+    }
+
+    const session = sessionResult.rows[0]
+
+    // Generate new access token
+    const accessToken = jwt.sign(
+      { userId: session.user_id, email: session.email },
+      JWT_SECRET,
+      { expiresIn: JWT_ACCESS_EXPIRES }
+    )
+
+    // Optionally rotate refresh token for added security
+    const newRefreshToken = generateToken()
+    const newRefreshExpires = Date.now() + (7 * 24 * 60 * 60 * 1000)
+
+    await pool.query(
+      `UPDATE user_sessions SET refresh_token = $1, expires_at = $2 WHERE id = $3`,
+      [newRefreshToken, newRefreshExpires, session.id]
+    )
+
+    res.json({
+      accessToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: session.user_id,
+        email: session.email,
+        emailVerified: session.email_verified
+      }
+    })
+  } catch (error) {
+    console.error('Token refresh error:', error)
+    res.status(500).json({ error: 'Token refresh failed' })
+  }
+})
+
+// Request password reset
+authRouter.post('/forgot-password', async (req, res) => {
+  const { email } = req.body
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' })
+  }
+
+  try {
+    // Find user
+    const result = await pool.query(
+      'SELECT id, email FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    )
+
+    // Always return success to prevent email enumeration
+    if (result.rows.length === 0) {
+      return res.json({ message: 'If the email exists, a password reset link has been sent.' })
+    }
+
+    const user = result.rows[0]
+
+    // Generate reset token
+    const resetToken = generateToken()
+    const resetExpires = Date.now() + (60 * 60 * 1000) // 1 hour
+
+    await pool.query(
+      `UPDATE users SET password_reset_token = $1, password_reset_expires = $2, updated_at = $3 WHERE id = $4`,
+      [resetToken, resetExpires, Date.now(), user.id]
+    )
+
+    // Send reset email
+    const resetUrl = `${APP_URL}/reset-password/${resetToken}`
+    await sendEmail(
+      user.email,
+      'Reset your password - Music League Strategist',
+      `
+        <h2>Password Reset Request</h2>
+        <p>Click the link below to reset your password:</p>
+        <p><a href="${resetUrl}" style="display: inline-block; padding: 12px 24px; background-color: #7c3aed; color: white; text-decoration: none; border-radius: 6px;">Reset Password</a></p>
+        <p>Or copy this link: ${resetUrl}</p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+      `
+    )
+
+    res.json({ message: 'If the email exists, a password reset link has been sent.' })
+  } catch (error) {
+    console.error('Password reset request error:', error)
+    res.status(500).json({ error: 'Failed to process password reset request' })
+  }
+})
+
+// Validate reset token (check if it exists and is not expired)
+authRouter.get('/reset-password/:token', async (req, res) => {
+  const { token } = req.params
+
+  try {
+    const result = await pool.query(
+      `SELECT id FROM users WHERE password_reset_token = $1 AND password_reset_expires > $2`,
+      [token, Date.now()]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ valid: false, error: 'Invalid or expired reset token' })
+    }
+
+    res.json({ valid: true })
+  } catch (error) {
+    console.error('Token validation error:', error)
+    res.status(500).json({ valid: false, error: 'Failed to validate token' })
+  }
+})
+
+// Reset password with token
+authRouter.post('/reset-password/:token', async (req, res) => {
+  const { token } = req.params
+  const { password } = req.body
+
+  if (!password) {
+    return res.status(400).json({ error: 'Password is required' })
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' })
+  }
+
+  try {
+    // Find user with valid reset token
+    const result = await pool.query(
+      `SELECT id FROM users WHERE password_reset_token = $1 AND password_reset_expires > $2`,
+      [token, Date.now()]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' })
+    }
+
+    const user = result.rows[0]
+
+    // Hash new password
+    const saltRounds = 10
+    const passwordHash = await bcrypt.hash(password, saltRounds)
+
+    // Update password and clear reset token
+    await pool.query(
+      `UPDATE users SET password_hash = $1, password_reset_token = null, password_reset_expires = null, updated_at = $2 WHERE id = $3`,
+      [passwordHash, Date.now(), user.id]
+    )
+
+    // Invalidate all existing sessions (force re-login)
+    await pool.query('DELETE FROM user_sessions WHERE user_id = $1', [user.id])
+
+    res.json({ message: 'Password reset successfully. Please log in with your new password.' })
+  } catch (error) {
+    console.error('Password reset error:', error)
+    res.status(500).json({ error: 'Password reset failed' })
+  }
+})
+
+// Get current user info
+authRouter.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, email_verified, created_at FROM users WHERE id = $1',
+      [req.user.userId]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    const user = result.rows[0]
+    res.json({
+      id: user.id,
+      email: user.email,
+      emailVerified: user.email_verified,
+      createdAt: Number(user.created_at)
+    })
+  } catch (error) {
+    console.error('Get user error:', error)
+    res.status(500).json({ error: 'Failed to get user info' })
+  }
+})
+
+// ============================================================================
+// TEST ENDPOINTS (only available in non-production)
+// ============================================================================
+
+// Get user token for testing (verification or password reset)
+api.get('/test/user-token', async (req, res) => {
+  // Only allow in non-production environments
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ error: 'Not available in production' })
+  }
+
+  const { email, type } = req.query
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required' })
+  }
+
+  try {
+    let column
+    if (type === 'verification') {
+      column = 'email_verification_token'
+    } else if (type === 'reset') {
+      column = 'password_reset_token'
+    } else {
+      return res.status(400).json({ error: 'Invalid type. Use "verification" or "reset"' })
+    }
+
+    const result = await pool.query(
+      `SELECT ${column} as token FROM users WHERE email = $1`,
+      [email.toLowerCase()]
+    )
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' })
+    }
+
+    res.json({ token: result.rows[0].token })
+  } catch (error) {
+    console.error('Test token error:', error)
+    res.status(500).json({ error: 'Failed to get token' })
+  }
 })
 
 // Initialize database schema
@@ -102,12 +690,69 @@ async function initDatabase() {
       console.log('Old tables dropped, creating new schema...')
     }
 
+    // Check if we need to add user_id columns (migration for auth system)
+    const userIdCheck = await client.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'themes' AND column_name = 'user_id'
+    `)
+
+    const needsUserIdMigration = schemaCheck.rows.length > 0 && userIdCheck.rows.length === 0
+
+    if (needsUserIdMigration) {
+      console.log('Migrating database to add user authentication support...')
+      // Drop all existing tables to start fresh with user-scoped data
+      // This is simpler than migrating existing data to a default user
+      await client.query(`
+        DROP TABLE IF EXISTS conversation_history CASCADE;
+        DROP TABLE IF EXISTS session_songs CASCADE;
+        DROP TABLE IF EXISTS session_preferences CASCADE;
+        DROP TABLE IF EXISTS rejected_songs CASCADE;
+        DROP TABLE IF EXISTS theme_songs CASCADE;
+        DROP TABLE IF EXISTS saved_songs CASCADE;
+        DROP TABLE IF EXISTS long_term_preferences CASCADE;
+        DROP TABLE IF EXISTS sessions CASCADE;
+        DROP TABLE IF EXISTS songs CASCADE;
+        DROP TABLE IF EXISTS themes CASCADE;
+        DROP TABLE IF EXISTS user_profile CASCADE;
+        DROP TABLE IF EXISTS competitor_analysis CASCADE;
+        DROP TABLE IF EXISTS settings CASCADE;
+        DROP TABLE IF EXISTS ai_models CASCADE;
+        DROP TABLE IF EXISTS users CASCADE;
+        DROP TABLE IF EXISTS user_sessions CASCADE;
+      `)
+      console.log('Old tables dropped, creating new schema with user support...')
+    }
+
     await client.query(`
       CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+      -- Users table (authentication)
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        email_verified BOOLEAN DEFAULT FALSE,
+        email_verification_token VARCHAR(255),
+        email_verification_expires BIGINT,
+        password_reset_token VARCHAR(255),
+        password_reset_expires BIGINT,
+        created_at BIGINT NOT NULL,
+        updated_at BIGINT NOT NULL
+      );
+
+      -- User sessions (refresh tokens)
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        refresh_token VARCHAR(255) NOT NULL,
+        expires_at BIGINT NOT NULL,
+        created_at BIGINT NOT NULL
+      );
 
       -- Themes table (using TEXT for IDs to support frontend-generated IDs)
       CREATE TABLE IF NOT EXISTS themes (
         id TEXT PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         raw_theme TEXT NOT NULL,
         interpretation TEXT,
         strategy TEXT,
@@ -159,6 +804,7 @@ async function initDatabase() {
       -- Sessions table
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         theme_id TEXT REFERENCES themes(id) ON DELETE SET NULL,
         title VARCHAR(255) NOT NULL,
         phase VARCHAR(50),
@@ -206,10 +852,10 @@ async function initDatabase() {
         created_at BIGINT NOT NULL
       );
 
-      -- User profile
+      -- User profile (user's music taste profile)
       CREATE TABLE IF NOT EXISTS user_profile (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        user_id VARCHAR(50) DEFAULT 'default',
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         summary TEXT,
         categories JSONB DEFAULT '{}',
         evidence_count INTEGER DEFAULT 0,
@@ -221,7 +867,7 @@ async function initDatabase() {
       -- Long-term preferences
       CREATE TABLE IF NOT EXISTS long_term_preferences (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        user_id VARCHAR(50) DEFAULT 'default',
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         statement TEXT NOT NULL,
         specificity VARCHAR(20),
         weight REAL DEFAULT 0.5,
@@ -231,6 +877,7 @@ async function initDatabase() {
       -- Saved songs (Songs I Like collection)
       CREATE TABLE IF NOT EXISTS saved_songs (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         song_id TEXT REFERENCES songs(id) ON DELETE CASCADE,
         tags TEXT[],
         notes TEXT,
@@ -241,17 +888,17 @@ async function initDatabase() {
       -- Competitor analysis
       CREATE TABLE IF NOT EXISTS competitor_analysis (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        user_id VARCHAR(50) DEFAULT 'default',
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         league_name VARCHAR(255),
         data JSONB NOT NULL,
         imported_at BIGINT NOT NULL,
         UNIQUE(user_id)
       );
 
-      -- Settings
+      -- Settings (user-specific preferences, not API keys)
       CREATE TABLE IF NOT EXISTS settings (
         id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-        user_id VARCHAR(50) DEFAULT 'default',
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
         settings JSONB NOT NULL DEFAULT '{}',
         updated_at BIGINT NOT NULL,
         UNIQUE(user_id)
@@ -281,6 +928,17 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_sessions_theme ON sessions(theme_id);
       CREATE INDEX IF NOT EXISTS idx_saved_songs_song ON saved_songs(song_id);
       CREATE INDEX IF NOT EXISTS idx_ai_models_model_id ON ai_models(model_id);
+
+      -- User-related indexes for efficient queries
+      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      CREATE INDEX IF NOT EXISTS idx_users_verification_token ON users(email_verification_token);
+      CREATE INDEX IF NOT EXISTS idx_users_reset_token ON users(password_reset_token);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_user_sessions_token ON user_sessions(refresh_token);
+      CREATE INDEX IF NOT EXISTS idx_themes_user ON themes(user_id);
+      CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+      CREATE INDEX IF NOT EXISTS idx_saved_songs_user ON saved_songs(user_id);
+      CREATE INDEX IF NOT EXISTS idx_long_term_preferences_user ON long_term_preferences(user_id);
     `)
 
     console.log('Database schema initialized')
@@ -294,7 +952,7 @@ async function initDatabase() {
 // ============================================================================
 
 // Get all themes (with song counts)
-api.get('/themes', async (req, res) => {
+api.get('/themes', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT t.*,
@@ -309,9 +967,10 @@ api.get('/themes', async (req, res) => {
       FROM themes t
       LEFT JOIN theme_songs ts ON t.id = ts.theme_id
       LEFT JOIN songs s ON ts.song_id = s.id
+      WHERE t.user_id = $1
       GROUP BY t.id
       ORDER BY t.updated_at DESC
-    `)
+    `, [req.user.userId])
 
     // Transform to frontend format
     const themes = result.rows.map(row => {
@@ -344,7 +1003,7 @@ api.get('/themes', async (req, res) => {
 })
 
 // Get single theme with all songs
-api.get('/themes/:id', async (req, res) => {
+api.get('/themes/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const result = await pool.query(`
@@ -360,9 +1019,9 @@ api.get('/themes/:id', async (req, res) => {
       FROM themes t
       LEFT JOIN theme_songs ts ON t.id = ts.theme_id
       LEFT JOIN songs s ON ts.song_id = s.id
-      WHERE t.id = $1
+      WHERE t.id = $1 AND t.user_id = $2
       GROUP BY t.id
-    `, [id])
+    `, [id, req.user.userId])
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Theme not found' })
@@ -398,15 +1057,15 @@ api.get('/themes/:id', async (req, res) => {
 })
 
 // Create theme
-api.post('/themes', async (req, res) => {
+api.post('/themes', authenticateToken, async (req, res) => {
   try {
     const { id, rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist, createdAt, updatedAt } = req.body
     const now = Date.now()
     const themeId = id || generateUUID()
 
     const result = await pool.query(`
-      INSERT INTO themes (id, raw_theme, title, interpretation, strategy, status, deadline, phase, hall_passes_used, spotify_playlist, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO themes (id, user_id, raw_theme, title, interpretation, strategy, status, deadline, phase, hall_passes_used, spotify_playlist, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       ON CONFLICT (id) DO UPDATE SET
         raw_theme = EXCLUDED.raw_theme,
         title = EXCLUDED.title,
@@ -418,8 +1077,9 @@ api.post('/themes', async (req, res) => {
         hall_passes_used = EXCLUDED.hall_passes_used,
         spotify_playlist = EXCLUDED.spotify_playlist,
         updated_at = EXCLUDED.updated_at
+      WHERE themes.user_id = $2
       RETURNING *
-    `, [themeId, rawTheme, title, interpretation, strategy, status || 'active', deadline, phase || 'brainstorm', hallPassesUsed || { semifinals: false, finals: false }, spotifyPlaylist, createdAt || now, updatedAt || now])
+    `, [themeId, req.user.userId, rawTheme, title, interpretation, strategy, status || 'active', deadline, phase || 'brainstorm', hallPassesUsed || { semifinals: false, finals: false }, spotifyPlaylist, createdAt || now, updatedAt || now])
 
     const row = result.rows[0]
     res.status(201).json({
@@ -447,7 +1107,7 @@ api.post('/themes', async (req, res) => {
 })
 
 // Update theme with funnel data
-api.put('/themes/:id', async (req, res) => {
+api.put('/themes/:id', authenticateToken, async (req, res) => {
   const client = await pool.connect()
   try {
     const { id } = req.params
@@ -468,9 +1128,9 @@ api.put('/themes/:id', async (req, res) => {
           hall_passes_used = COALESCE($8, hall_passes_used),
           spotify_playlist = COALESCE($9, spotify_playlist),
           updated_at = $10
-      WHERE id = $11
+      WHERE id = $11 AND user_id = $12
       RETURNING *
-    `, [rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist, now, id])
+    `, [rawTheme, title, interpretation, strategy, status, deadline, phase, hallPassesUsed, spotifyPlaylist, now, id, req.user.userId])
 
     if (result.rows.length === 0) {
       await client.query('ROLLBACK')
@@ -590,10 +1250,13 @@ api.put('/themes/:id', async (req, res) => {
 })
 
 // Delete theme
-api.delete('/themes/:id', async (req, res) => {
+api.delete('/themes/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    await pool.query('DELETE FROM themes WHERE id = $1', [id])
+    const result = await pool.query('DELETE FROM themes WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.user.userId])
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Theme not found' })
+    }
     res.status(204).send()
   } catch (error) {
     console.error('Error deleting theme:', error)
@@ -606,7 +1269,7 @@ api.delete('/themes/:id', async (req, res) => {
 // ============================================================================
 
 // Add song to theme
-api.post('/themes/:themeId/songs', async (req, res) => {
+api.post('/themes/:themeId/songs', authenticateToken, async (req, res) => {
   const client = await pool.connect()
   try {
     const { themeId } = req.params
@@ -614,6 +1277,13 @@ api.post('/themes/:themeId/songs', async (req, res) => {
     const now = Date.now()
 
     await client.query('BEGIN')
+
+    // Verify theme belongs to user
+    const themeCheck = await client.query('SELECT id FROM themes WHERE id = $1 AND user_id = $2', [themeId, req.user.userId])
+    if (themeCheck.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'Theme not found' })
+    }
 
     // Insert or update song (use frontend ID directly, generate UUID only if missing)
     const songId = song.id || generateUUID()
@@ -802,9 +1472,14 @@ api.put('/themes/:themeId/songs/:songId', async (req, res) => {
 })
 
 // Remove song from theme
-api.delete('/themes/:themeId/songs/:songId', async (req, res) => {
+api.delete('/themes/:themeId/songs/:songId', authenticateToken, async (req, res) => {
   try {
     const { themeId, songId } = req.params
+    // Verify theme belongs to user
+    const themeCheck = await pool.query('SELECT id FROM themes WHERE id = $1 AND user_id = $2', [themeId, req.user.userId])
+    if (themeCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Theme not found' })
+    }
     await pool.query('DELETE FROM theme_songs WHERE theme_id = $1 AND song_id = $2', [themeId, songId])
     await pool.query('UPDATE themes SET updated_at = $1 WHERE id = $2', [Date.now(), themeId])
     res.status(204).send()
@@ -819,7 +1494,7 @@ api.delete('/themes/:themeId/songs/:songId', async (req, res) => {
 // ============================================================================
 
 // Get all sessions with full data
-api.get('/sessions', async (req, res) => {
+api.get('/sessions', authenticateToken, async (req, res) => {
   try {
     // Get sessions with conversation history
     const sessionsResult = await pool.query(`
@@ -833,28 +1508,35 @@ api.get('/sessions', async (req, res) => {
         ) FILTER (WHERE ch.id IS NOT NULL), '[]') as conversation_history
       FROM sessions s
       LEFT JOIN conversation_history ch ON s.id = ch.session_id
+      WHERE s.user_id = $1
       GROUP BY s.id
       ORDER BY s.updated_at DESC
-    `)
+    `, [req.user.userId])
 
-    // Get all session songs with full song data
+    // Get all session songs with full song data (only for user's sessions)
     const songsResult = await pool.query(`
       SELECT ss.session_id, songs.*
       FROM session_songs ss
       JOIN songs ON ss.song_id = songs.id
-    `)
+      JOIN sessions s ON ss.session_id = s.id
+      WHERE s.user_id = $1
+    `, [req.user.userId])
 
-    // Get all rejected songs
+    // Get all rejected songs (only for user's sessions)
     const rejectedResult = await pool.query(`
-      SELECT session_id, title, artist, reason, rejected_at
-      FROM rejected_songs
-    `)
+      SELECT rs.session_id, rs.title, rs.artist, rs.reason, rs.rejected_at
+      FROM rejected_songs rs
+      JOIN sessions s ON rs.session_id = s.id
+      WHERE s.user_id = $1
+    `, [req.user.userId])
 
-    // Get all session preferences
+    // Get all session preferences (only for user's sessions)
     const prefsResult = await pool.query(`
-      SELECT session_id, statement, confidence, source, created_at
-      FROM session_preferences
-    `)
+      SELECT sp.session_id, sp.statement, sp.confidence, sp.source, sp.created_at
+      FROM session_preferences sp
+      JOIN sessions s ON sp.session_id = s.id
+      WHERE s.user_id = $1
+    `, [req.user.userId])
 
     // Build lookup maps
     const songsBySession = new Map()
@@ -1027,7 +1709,7 @@ api.get('/sessions/:id', async (req, res) => {
 })
 
 // Create or update session with full data
-api.post('/sessions', async (req, res) => {
+api.post('/sessions', authenticateToken, async (req, res) => {
   try {
     const {
       id, themeId, title, phase, iterationCount, finalPickId, playlistCreated,
@@ -1038,8 +1720,8 @@ api.post('/sessions', async (req, res) => {
     const sessionId = id || generateUUID()
 
     const result = await pool.query(`
-      INSERT INTO sessions (id, theme_id, title, phase, iteration_count, final_pick_id, playlist_created, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO sessions (id, user_id, theme_id, title, phase, iteration_count, final_pick_id, playlist_created, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       ON CONFLICT (id) DO UPDATE SET
         theme_id = EXCLUDED.theme_id,
         title = EXCLUDED.title,
@@ -1048,8 +1730,9 @@ api.post('/sessions', async (req, res) => {
         final_pick_id = EXCLUDED.final_pick_id,
         playlist_created = EXCLUDED.playlist_created,
         updated_at = EXCLUDED.updated_at
+      WHERE sessions.user_id = $2
       RETURNING *
-    `, [sessionId, themeId, title, phase || 'exploring', iterationCount || 0, finalPickId, playlistCreated, createdAt || now, updatedAt || now])
+    `, [sessionId, req.user.userId, themeId, title, phase || 'exploring', iterationCount || 0, finalPickId, playlistCreated, createdAt || now, updatedAt || now])
 
     // Insert conversation history if provided
     if (conversationHistory && conversationHistory.length > 0) {
@@ -1134,7 +1817,7 @@ api.post('/sessions', async (req, res) => {
 })
 
 // Update session with full data
-api.put('/sessions/:id', async (req, res) => {
+api.put('/sessions/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const {
@@ -1151,9 +1834,9 @@ api.put('/sessions/:id', async (req, res) => {
         final_pick_id = COALESCE($4, final_pick_id),
         playlist_created = COALESCE($5, playlist_created),
         updated_at = $6
-      WHERE id = $7
+      WHERE id = $7 AND user_id = $8
       RETURNING *
-    `, [title, phase, iterationCount, finalPickId, playlistCreated, now, id])
+    `, [title, phase, iterationCount, finalPickId, playlistCreated, now, id, req.user.userId])
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Session not found' })
@@ -1238,10 +1921,13 @@ api.put('/sessions/:id', async (req, res) => {
 })
 
 // Delete session
-api.delete('/sessions/:id', async (req, res) => {
+api.delete('/sessions/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
-    await pool.query('DELETE FROM sessions WHERE id = $1', [id])
+    const result = await pool.query('DELETE FROM sessions WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.user.userId])
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
     res.status(204).send()
   } catch (error) {
     console.error('Error deleting session:', error)
@@ -1250,10 +1936,16 @@ api.delete('/sessions/:id', async (req, res) => {
 })
 
 // Add message to session
-api.post('/sessions/:id/messages', async (req, res) => {
+api.post('/sessions/:id/messages', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
     const { role, content, timestamp } = req.body
+
+    // Verify session belongs to user
+    const sessionCheck = await pool.query('SELECT id FROM sessions WHERE id = $1 AND user_id = $2', [id, req.user.userId])
+    if (sessionCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' })
+    }
 
     await pool.query(`
       INSERT INTO conversation_history (session_id, role, content, timestamp)
@@ -1274,9 +1966,9 @@ api.post('/sessions/:id/messages', async (req, res) => {
 // ============================================================================
 
 // Get user profile
-api.get('/profile', async (req, res) => {
+api.get('/profile', authenticateToken, async (req, res) => {
   try {
-    const userId = req.query.userId || 'default'
+    const userId = req.user.userId
 
     const profileResult = await pool.query(
       'SELECT * FROM user_profile WHERE user_id = $1',
@@ -1319,10 +2011,10 @@ api.get('/profile', async (req, res) => {
 })
 
 // Update user profile
-api.put('/profile', async (req, res) => {
+api.put('/profile', authenticateToken, async (req, res) => {
   const client = await pool.connect()
   try {
-    const userId = req.query.userId || 'default'
+    const userId = req.user.userId
     const { summary, categories, evidenceCount, weight, longTermPreferences } = req.body
     const now = Date.now()
 
@@ -1366,14 +2058,15 @@ api.put('/profile', async (req, res) => {
 // ============================================================================
 
 // Get saved songs
-api.get('/saved-songs', async (req, res) => {
+api.get('/saved-songs', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT ss.*, s.*
       FROM saved_songs ss
       JOIN songs s ON ss.song_id = s.id
+      WHERE ss.user_id = $1
       ORDER BY ss.saved_at DESC
-    `)
+    `, [req.user.userId])
 
     const songs = result.rows.map(row => ({
       id: row.song_id,
@@ -1401,7 +2094,7 @@ api.get('/saved-songs', async (req, res) => {
 })
 
 // Save a song
-api.post('/saved-songs', async (req, res) => {
+api.post('/saved-songs', authenticateToken, async (req, res) => {
   const client = await pool.connect()
   try {
     const { song, tags, notes, sourceThemeId } = req.body
@@ -1427,12 +2120,12 @@ api.post('/saved-songs', async (req, res) => {
 
     // songId is already defined above
 
-    // Save the song
+    // Save the song for this user
     await client.query(`
-      INSERT INTO saved_songs (song_id, tags, notes, source_theme_id, saved_at)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO saved_songs (user_id, song_id, tags, notes, source_theme_id, saved_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT DO NOTHING
-    `, [songId, tags || [], notes, sourceThemeId, now])
+    `, [req.user.userId, songId, tags || [], notes, sourceThemeId, now])
 
     await client.query('COMMIT')
 
@@ -1447,10 +2140,10 @@ api.post('/saved-songs', async (req, res) => {
 })
 
 // Remove saved song
-api.delete('/saved-songs/:songId', async (req, res) => {
+api.delete('/saved-songs/:songId', authenticateToken, async (req, res) => {
   try {
     const { songId } = req.params
-    await pool.query('DELETE FROM saved_songs WHERE song_id = $1', [songId])
+    await pool.query('DELETE FROM saved_songs WHERE song_id = $1 AND user_id = $2', [songId, req.user.userId])
     res.status(204).send()
   } catch (error) {
     console.error('Error removing saved song:', error)
@@ -1463,12 +2156,11 @@ api.delete('/saved-songs/:songId', async (req, res) => {
 // ============================================================================
 
 // Get competitor analysis
-api.get('/competitor-analysis', async (req, res) => {
+api.get('/competitor-analysis', authenticateToken, async (req, res) => {
   try {
-    const userId = req.query.userId || 'default'
     const result = await pool.query(
       'SELECT * FROM competitor_analysis WHERE user_id = $1',
-      [userId]
+      [req.user.userId]
     )
 
     if (result.rows.length === 0) {
@@ -1491,9 +2183,8 @@ api.get('/competitor-analysis', async (req, res) => {
 })
 
 // Import competitor analysis
-api.post('/competitor-analysis', async (req, res) => {
+api.post('/competitor-analysis', authenticateToken, async (req, res) => {
   try {
-    const userId = req.query.userId || 'default'
     const { leagueName, data } = req.body
     const now = Date.now()
 
@@ -1504,7 +2195,7 @@ api.post('/competitor-analysis', async (req, res) => {
         league_name = EXCLUDED.league_name,
         data = EXCLUDED.data,
         imported_at = EXCLUDED.imported_at
-    `, [userId, leagueName, data, now])
+    `, [req.user.userId, leagueName, data, now])
 
     res.status(201).json({ success: true })
   } catch (error) {

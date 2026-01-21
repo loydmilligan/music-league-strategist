@@ -21,6 +21,8 @@ services:
       dockerfile: Dockerfile
     container_name: ml-strategist-api
     restart: unless-stopped
+    ports:
+      - "3001:3001"
     environment:
       - PORT=3001
       - DB_HOST=postgres
@@ -32,6 +34,17 @@ services:
       - VITE_SPOTIFY_CLIENT_ID=${VITE_SPOTIFY_CLIENT_ID:-}
       - VITE_SPOTIFY_CLIENT_SECRET=${VITE_SPOTIFY_CLIENT_SECRET:-}
       - VITE_SPOTIFY_CALLBACK_URL=${VITE_SPOTIFY_CALLBACK_URL:-}
+      # JWT Configuration
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-in-production}
+      - JWT_ACCESS_EXPIRES=${JWT_ACCESS_EXPIRES:-15m}
+      - JWT_REFRESH_EXPIRES=${JWT_REFRESH_EXPIRES:-7d}
+      # Email Configuration (optional)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - APP_URL=${APP_URL:-http://localhost:5173}
     depends_on:
       postgres:
         condition: service_healthy

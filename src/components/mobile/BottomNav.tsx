@@ -127,6 +127,7 @@ export function BottomNav({
             return (
               <button
                 key={item.id}
+                data-testid={`nav-${item.id}`}
                 onClick={() => onViewChange(item.id)}
                 className={cn(
                   'flex flex-col items-center justify-center',

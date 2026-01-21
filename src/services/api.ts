@@ -12,8 +12,18 @@ import type {
   SavedSong,
   CompetitorAnalysisData,
 } from '@/types/musicLeague'
+import { useAuthStore } from '@/stores/authStore'
 
 const API_BASE = '/api/ml'
+
+// Get auth token from store
+const getAuthHeaders = (): Record<string, string> => {
+  const { accessToken } = useAuthStore.getState()
+  if (accessToken) {
+    return { 'Authorization': `Bearer ${accessToken}` }
+  }
+  return {}
+}
 
 // Settings type (matches settingsStore)
 export interface ApiSettings {
@@ -69,6 +79,7 @@ class ApiError extends Error {
   }
 }
 
+// Fetch without auth (for public endpoints like settings, models)
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     headers: {
@@ -91,36 +102,77 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
   return response.json()
 }
 
+// Fetch with auth (for protected endpoints)
+async function fetchAuthApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const makeRequest = async (): Promise<Response> => {
+    return fetch(`${API_BASE}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...options?.headers,
+      },
+      ...options,
+    })
+  }
+
+  let response = await makeRequest()
+
+  // If unauthorized, try to refresh token and retry
+  if (response.status === 401 || response.status === 403) {
+    const { refreshAccessToken, clearAuth } = useAuthStore.getState()
+    const refreshed = await refreshAccessToken()
+
+    if (refreshed) {
+      response = await makeRequest()
+    } else {
+      clearAuth()
+      throw new ApiError(401, 'Session expired. Please log in again.')
+    }
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => 'Unknown error')
+    throw new ApiError(response.status, `API error ${response.status}: ${errorText}`)
+  }
+
+  // Handle 204 No Content
+  if (response.status === 204) {
+    return undefined as T
+  }
+
+  return response.json()
+}
+
 export const api = {
   // ============================================================================
-  // THEMES
+  // THEMES (Protected - requires auth)
   // ============================================================================
 
-  getThemes: (): Promise<MusicLeagueTheme[]> => fetchApi('/themes'),
+  getThemes: (): Promise<MusicLeagueTheme[]> => fetchAuthApi('/themes'),
 
-  getTheme: (id: string): Promise<MusicLeagueTheme> => fetchApi(`/themes/${id}`),
+  getTheme: (id: string): Promise<MusicLeagueTheme> => fetchAuthApi(`/themes/${id}`),
 
   createTheme: (data: Partial<MusicLeagueTheme>): Promise<MusicLeagueTheme> =>
-    fetchApi('/themes', {
+    fetchAuthApi('/themes', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
   updateTheme: (id: string, data: Partial<MusicLeagueTheme>): Promise<MusicLeagueTheme> =>
-    fetchApi(`/themes/${id}`, {
+    fetchAuthApi(`/themes/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   deleteTheme: (id: string): Promise<void> =>
-    fetchApi(`/themes/${id}`, { method: 'DELETE' }),
+    fetchAuthApi(`/themes/${id}`, { method: 'DELETE' }),
 
   // ============================================================================
-  // SONGS (within themes)
+  // SONGS (within themes - Protected)
   // ============================================================================
 
   addSongToTheme: (themeId: string, song: Song, tier: FunnelTier): Promise<Song> =>
-    fetchApi(`/themes/${themeId}/songs`, {
+    fetchAuthApi(`/themes/${themeId}/songs`, {
       method: 'POST',
       body: JSON.stringify({ song, tier }),
     }),
@@ -130,60 +182,60 @@ export const api = {
     songId: string,
     data: { tier?: FunnelTier; song?: Partial<Song> }
   ): Promise<Song> =>
-    fetchApi(`/themes/${themeId}/songs/${songId}`, {
+    fetchAuthApi(`/themes/${themeId}/songs/${songId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   removeSong: (themeId: string, songId: string): Promise<void> =>
-    fetchApi(`/themes/${themeId}/songs/${songId}`, { method: 'DELETE' }),
+    fetchAuthApi(`/themes/${themeId}/songs/${songId}`, { method: 'DELETE' }),
 
   // ============================================================================
-  // SESSIONS
+  // SESSIONS (Protected)
   // ============================================================================
 
-  getSessions: (): Promise<MusicLeagueSession[]> => fetchApi('/sessions'),
+  getSessions: (): Promise<MusicLeagueSession[]> => fetchAuthApi('/sessions'),
 
-  getSession: (id: string): Promise<MusicLeagueSession> => fetchApi(`/sessions/${id}`),
+  getSession: (id: string): Promise<MusicLeagueSession> => fetchAuthApi(`/sessions/${id}`),
 
   createSession: (data: Partial<MusicLeagueSession>): Promise<MusicLeagueSession> =>
-    fetchApi('/sessions', {
+    fetchAuthApi('/sessions', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
   updateSession: (id: string, data: Partial<MusicLeagueSession>): Promise<MusicLeagueSession> =>
-    fetchApi(`/sessions/${id}`, {
+    fetchAuthApi(`/sessions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   deleteSession: (id: string): Promise<void> =>
-    fetchApi(`/sessions/${id}`, { method: 'DELETE' }),
+    fetchAuthApi(`/sessions/${id}`, { method: 'DELETE' }),
 
   addMessage: (sessionId: string, message: ApiChatMessage): Promise<void> =>
-    fetchApi(`/sessions/${sessionId}/messages`, {
+    fetchAuthApi(`/sessions/${sessionId}/messages`, {
       method: 'POST',
       body: JSON.stringify(message),
     }),
 
   // ============================================================================
-  // USER PROFILE
+  // USER PROFILE (Protected)
   // ============================================================================
 
-  getProfile: (): Promise<MusicLeagueUserProfile> => fetchApi('/profile'),
+  getProfile: (): Promise<MusicLeagueUserProfile> => fetchAuthApi('/profile'),
 
   updateProfile: (data: Partial<MusicLeagueUserProfile>): Promise<{ success: boolean }> =>
-    fetchApi('/profile', {
+    fetchAuthApi('/profile', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   // ============================================================================
-  // SAVED SONGS (Songs I Like)
+  // SAVED SONGS (Songs I Like - Protected)
   // ============================================================================
 
-  getSavedSongs: (): Promise<SavedSong[]> => fetchApi('/saved-songs'),
+  getSavedSongs: (): Promise<SavedSong[]> => fetchAuthApi('/saved-songs'),
 
   saveSong: (
     song: Song,
@@ -191,26 +243,26 @@ export const api = {
     notes?: string,
     sourceThemeId?: string
   ): Promise<{ success: boolean; songId: string }> =>
-    fetchApi('/saved-songs', {
+    fetchAuthApi('/saved-songs', {
       method: 'POST',
       body: JSON.stringify({ song, tags, notes, sourceThemeId }),
     }),
 
   removeSavedSong: (songId: string): Promise<void> =>
-    fetchApi(`/saved-songs/${songId}`, { method: 'DELETE' }),
+    fetchAuthApi(`/saved-songs/${songId}`, { method: 'DELETE' }),
 
   // ============================================================================
-  // COMPETITOR ANALYSIS
+  // COMPETITOR ANALYSIS (Protected)
   // ============================================================================
 
   getCompetitorAnalysis: (): Promise<CompetitorAnalysisData | null> =>
-    fetchApi('/competitor-analysis'),
+    fetchAuthApi('/competitor-analysis'),
 
   importCompetitorAnalysis: (
     leagueName: string,
     data: CompetitorAnalysisData
   ): Promise<{ success: boolean }> =>
-    fetchApi('/competitor-analysis', {
+    fetchAuthApi('/competitor-analysis', {
       method: 'POST',
       body: JSON.stringify({ leagueName, data }),
     }),
