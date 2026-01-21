@@ -122,22 +122,7 @@ export function useServerSync() {
         return
       }
 
-      // Check if server has data
-      const { hasData: serverHasData } = await api.hasData()
-      const localData = getLocalStorageData()
-      const hasLocalData = localData && (localData.themes.length > 0 || localData.sessions.length > 0)
-
-      // If server is empty but we have local data, offer migration (unless already skipped)
-      if (!serverHasData && hasLocalData && !state.migrationSkipped) {
-        setState((s) => ({
-          ...s,
-          isLoading: false,
-          migrationNeeded: true,
-        }))
-        return
-      }
-
-      // Load from server
+      // Load from server (no migration prompt - users start fresh with their account)
       const [themes, sessions, profile, savedSongs, competitorData, settings] = await Promise.all([
         api.getThemes(),
         api.getSessions(),

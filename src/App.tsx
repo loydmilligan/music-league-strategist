@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Music2, Loader2, RefreshCw, Database, HardDrive } from 'lucide-react'
+import { Music2, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { initializeStoreSync } from '@/stores/storeSync'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -44,15 +44,7 @@ function MainApp(): React.ReactElement {
     return () => unsubscribe()
   }, [])
 
-  const {
-    isLoading,
-    error,
-    migrationNeeded,
-    isMigrating,
-    migrateToServer,
-    skipMigration,
-    retry,
-  } = useServerSync()
+  const { isLoading, error, retry } = useServerSync()
 
   // Handle song selection from any view
   const handleSongSelect = useCallback((song: Song) => {
@@ -81,57 +73,6 @@ function MainApp(): React.ReactElement {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
           <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Show migration prompt
-  if (migrationNeeded) {
-    return (
-      <div className="flex h-screen-dynamic flex-col items-center justify-center bg-background text-foreground p-6">
-        <div className="max-w-sm space-y-6 text-center">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
-            <Database className="h-10 w-10 text-primary" />
-          </div>
-          <h2 className="font-display text-2xl">Sync Your Data</h2>
-          <p className="text-muted-foreground text-sm">
-            We found existing data in your browser. Would you like to migrate it to the server?
-            This enables access from any device.
-          </p>
-          <div className="flex flex-col gap-3">
-            <Button
-              onClick={migrateToServer}
-              disabled={isMigrating}
-              className="h-14 gap-2 glow-primary"
-              size="lg"
-            >
-              {isMigrating ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Migrating...
-                </>
-              ) : (
-                <>
-                  <Database className="h-5 w-5" />
-                  Migrate to Server
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={skipMigration}
-              disabled={isMigrating}
-              className="h-14 gap-2"
-              size="lg"
-            >
-              <HardDrive className="h-5 w-5" />
-              Start Fresh
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Note: If you skip, your browser data will remain but won't sync to the server.
-          </p>
         </div>
       </div>
     )
