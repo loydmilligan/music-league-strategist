@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useSearchParams } from 'react-router-dom'
 import { Music2, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { initializeStoreSync } from '@/stores/storeSync'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useServerSync } from '@/hooks/useServerSync'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
+import { useSpotifyOAuth } from '@/hooks/useSpotifyOAuth'
 import type { Song } from '@/types/musicLeague'
 import {
   BottomNav,
@@ -31,12 +32,51 @@ function MainApp(): React.ReactElement {
   const [activeView, setActiveView] = useState<MobileView>('chat')
   const [selectedSong, setSelectedSong] = useState<Song | null>(null)
   const [slideoutOpen, setSlideoutOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const openRouterKey = useSettingsStore((s) => s.openRouterKey)
   const hasApiKey = !!openRouterKey
 
   const { activeTheme, createTheme, setActiveTheme } = useMusicLeagueStore()
   const theme = activeTheme()
+
+  const { handleOAuthCallback } = useSpotifyOAuth()
+
+  // Handle Spotify OAuth callback redirect
+  useEffect(() => {
+    const code = searchParams.get('code')
+    const error = searchParams.get('error')
+    const isOAuthRedirect = localStorage.getItem('spotify-oauth-redirect')
+
+    if (isOAuthRedirect && (code || error)) {
+      if (error) {
+        console.error('[Spotify OAuth] Authorization error:', error)
+        // Clear the error from URL
+        searchParams.delete('code')
+        searchParams.delete('error')
+        searchParams.delete('state')
+        setSearchParams(searchParams, { replace: true })
+        localStorage.removeItem('spotify-oauth-redirect')
+      } else if (code) {
+        // Exchange code for token
+        handleOAuthCallback(code)
+          .then(() => {
+            console.log('[Spotify OAuth] Successfully completed redirect flow')
+            // Clear OAuth params from URL
+            searchParams.delete('code')
+            searchParams.delete('state')
+            setSearchParams(searchParams, { replace: true })
+          })
+          .catch((err) => {
+            console.error('[Spotify OAuth] Failed to exchange code:', err)
+            // Clear params anyway
+            searchParams.delete('code')
+            searchParams.delete('state')
+            setSearchParams(searchParams, { replace: true })
+          })
+      }
+    }
+  }, [searchParams, setSearchParams, handleOAuthCallback])
 
   // Initialize store sync on mount
   useEffect(() => {

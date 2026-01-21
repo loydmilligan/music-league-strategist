@@ -142,19 +142,19 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
     removeSongFromTier(theme.id, song.id, fromTier)
   }
 
-  const handleRemoveWithRejection = (song: Song, fromTier: FunnelTier) => {
+  const handleRemoveWithRejection = (song: Song, fromTier: FunnelTier, timestamp: number) => {
     if (!theme) return
     // Track as rejected so AI won't re-suggest
     addRejectedSong({
       title: song.title,
       artist: song.artist,
       reason: 'Dismissed from candidates',
-      timestamp: Date.now()
+      timestamp
     })
     removeSongFromTier(theme.id, song.id, fromTier)
   }
 
-  const handleSwipeAction = (song: Song, tier: FunnelTier, direction: 'left' | 'right') => {
+  const handleSwipeAction = (song: Song, tier: FunnelTier, direction: 'left' | 'right', timestamp: number) => {
     if (!theme) return
 
     if (direction === 'right') {
@@ -167,7 +167,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
       // Demote or Remove
       if (tier === 'candidates') {
         // Remove from candidates AND track as rejected
-        handleRemoveWithRejection(song, tier)
+        handleRemoveWithRejection(song, tier, timestamp)
       } else {
         const prevTier = getPrevTier(tier)
         if (prevTier) {
@@ -330,7 +330,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
                         onSelect={() => onSongSelect?.(song)}
                         canPromote={!!getNextTier(tier)}
                         canDemote={!!getPrevTier(tier)}
-                        onSwipeAction={(direction) => handleSwipeAction(song, tier, direction)}
+                        onSwipeAction={(direction, timestamp) => handleSwipeAction(song, tier, direction, timestamp)}
                       />
                     ))}
                   </div>
@@ -355,7 +355,7 @@ interface SwipeableSongCardProps {
   onSelect: () => void
   canPromote: boolean
   canDemote: boolean
-  onSwipeAction: (direction: 'left' | 'right') => void
+  onSwipeAction: (direction: 'left' | 'right', timestamp: number) => void
 }
 
 function SwipeableSongCard({
@@ -414,10 +414,13 @@ function SwipeableSongCard({
 
           setIsAnimating(true)
 
+          // Capture timestamp at gesture completion (not during render)
+          const gestureTimestamp = Date.now()
+
           // Animate out before triggering action
           setSwipeX(direction === 'right' ? 200 : -200)
           setTimeout(() => {
-            onSwipeAction(direction)
+            onSwipeAction(direction, gestureTimestamp)
             setSwipeX(0)
             setIsAnimating(false)
           }, 150)
