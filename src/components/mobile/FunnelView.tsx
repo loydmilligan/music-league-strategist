@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useDrag } from '@use-gesture/react'
 import {
   Trophy,
   Medal,
@@ -75,6 +76,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
     demoteSong,
     removeSongFromTier,
     toggleMuted,
+    addRejectedSong,
   } = useMusicLeagueStore()
 
   const theme = activeTheme()
@@ -138,6 +140,41 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
   const handleRemove = (song: Song, fromTier: FunnelTier) => {
     if (!theme) return
     removeSongFromTier(theme.id, song.id, fromTier)
+  }
+
+  const handleRemoveWithRejection = (song: Song, fromTier: FunnelTier) => {
+    if (!theme) return
+    // Track as rejected so AI won't re-suggest
+    addRejectedSong({
+      title: song.title,
+      artist: song.artist,
+      reason: 'Dismissed from candidates',
+      timestamp: Date.now()
+    })
+    removeSongFromTier(theme.id, song.id, fromTier)
+  }
+
+  const handleSwipeAction = (song: Song, tier: FunnelTier, direction: 'left' | 'right') => {
+    if (!theme) return
+
+    if (direction === 'right') {
+      // Promote
+      const nextTier = getNextTier(tier)
+      if (nextTier) {
+        promoteSong(theme.id, { ...song, currentTier: tier }, nextTier, 'Promoted via swipe')
+      }
+    } else {
+      // Demote or Remove
+      if (tier === 'candidates') {
+        // Remove from candidates AND track as rejected
+        handleRemoveWithRejection(song, tier)
+      } else {
+        const prevTier = getPrevTier(tier)
+        if (prevTier) {
+          demoteSong(theme.id, { ...song, currentTier: tier }, prevTier, 'Demoted via swipe')
+        }
+      }
+    }
   }
 
   const handleToggleMute = (song: Song) => {
@@ -281,7 +318,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
                 {isExpanded && songs.length > 0 && (
                   <div className="px-4 pb-4 space-y-2">
                     {songs.map((song, index) => (
-                      <SongCard
+                      <SwipeableSongCard
                         key={song.id}
                         song={song}
                         tier={tier}
@@ -293,6 +330,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
                         onSelect={() => onSongSelect?.(song)}
                         canPromote={!!getNextTier(tier)}
                         canDemote={!!getPrevTier(tier)}
+                        onSwipeAction={(direction) => handleSwipeAction(song, tier, direction)}
                       />
                     ))}
                   </div>
@@ -306,7 +344,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
   )
 }
 
-interface SongCardProps {
+interface SwipeableSongCardProps {
   song: Song
   tier: FunnelTier
   rank?: number
@@ -317,9 +355,10 @@ interface SongCardProps {
   onSelect: () => void
   canPromote: boolean
   canDemote: boolean
+  onSwipeAction: (direction: 'left' | 'right') => void
 }
 
-function SongCard({
+function SwipeableSongCard({
   song,
   tier,
   rank,
@@ -329,95 +368,205 @@ function SongCard({
   onToggleMute,
   onSelect,
   canPromote,
-  canDemote
-}: SongCardProps): React.ReactElement {
-  return (
-    <div className={cn(
-      'song-card',
-      song.isMuted && 'opacity-50',
-      song.isEliminated && 'line-through opacity-30'
-    )}>
-      {/* Rank Badge */}
-      {rank !== undefined && (
-        <div className={cn(
-          'h-7 w-7 rounded-lg flex items-center justify-center',
-          'text-xs font-bold',
-          `tier-badge-${tier}`
-        )}>
-          {rank}
+  canDemote,
+  onSwipeAction
+}: SwipeableSongCardProps): React.ReactElement {
+  const [swipeX, setSwipeX] = useState(0)
+  const [isAnimating, setIsAnimating] = useState(false)
+
+  const SWIPE_THRESHOLD = 80
+  const MAX_SWIPE = 120
+
+  // Determine if swipe in each direction is allowed
+  const canSwipeRight = canPromote
+  const canSwipeLeft = canDemote || tier === 'candidates' // Can always dismiss from candidates
+
+  const bind = useDrag(
+    ({ down, movement: [mx], velocity: [vx] }) => {
+      // Prevent swipe if can't perform action in that direction
+      if (mx > 10 && !canSwipeRight) {
+        setSwipeX(0)
+        return
+      }
+      if (mx < -10 && !canSwipeLeft) {
+        setSwipeX(0)
+        return
+      }
+
+      if (down) {
+        // Clamp swipe distance
+        const clampedX = Math.max(-MAX_SWIPE, Math.min(MAX_SWIPE, mx))
+        setSwipeX(clampedX)
+      } else {
+        // On release - check if threshold exceeded or high velocity
+        const triggeredByVelocity = Math.abs(vx) > 0.5
+        const triggeredByDistance = Math.abs(mx) > SWIPE_THRESHOLD
+
+        if (triggeredByVelocity || triggeredByDistance) {
+          const direction = mx > 0 ? 'right' : 'left'
+
+          // Check if action is allowed in this direction
+          if ((direction === 'right' && !canSwipeRight) ||
+              (direction === 'left' && !canSwipeLeft)) {
+            setSwipeX(0)
+            return
+          }
+
+          setIsAnimating(true)
+
+          // Animate out before triggering action
+          setSwipeX(direction === 'right' ? 200 : -200)
+          setTimeout(() => {
+            onSwipeAction(direction)
+            setSwipeX(0)
+            setIsAnimating(false)
+          }, 150)
+        } else {
+          // Snap back
+          setSwipeX(0)
+        }
+      }
+    },
+    {
+      axis: 'x',
+      filterTaps: true,
+    }
+  )
+
+  // Calculate background color based on swipe direction
+  const getSwipeBackground = () => {
+    if (swipeX > 20 && canSwipeRight) return 'rgba(34, 197, 94, 0.15)' // Green for promote
+    if (swipeX < -20 && canSwipeLeft) return 'rgba(239, 68, 68, 0.15)' // Red for demote/remove
+    return 'transparent'
+  }
+
+  // Get swipe hint icon
+  const getSwipeHint = () => {
+    if (swipeX > 40 && canSwipeRight) {
+      return (
+        <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-success">
+          <ChevronUp className="h-5 w-5 animate-pulse" />
+          <span className="text-xs font-medium">Promote</span>
         </div>
-      )}
+      )
+    }
+    if (swipeX < -40 && canSwipeLeft) {
+      const isRemove = tier === 'candidates'
+      return (
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-destructive">
+          <span className="text-xs font-medium">{isRemove ? 'Remove' : 'Demote'}</span>
+          {isRemove ? (
+            <Trash2 className="h-5 w-5 animate-pulse" />
+          ) : (
+            <ChevronDown className="h-5 w-5 animate-pulse" />
+          )}
+        </div>
+      )
+    }
+    return null
+  }
 
-      {/* Song Info */}
-      <div className="flex-1 min-w-0" onClick={onSelect}>
-        <p className="font-medium text-sm truncate">{song.title}</p>
-        <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="flex items-center gap-0.5">
-        {canPromote && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-success"
-            onClick={(e) => {
-              e.stopPropagation()
-              onPromote()
-            }}
-          >
-            <ChevronUp className="h-4 w-4" />
-          </Button>
+  return (
+    <div
+      className="relative overflow-hidden rounded-xl"
+      style={{ backgroundColor: getSwipeBackground(), transition: 'background-color 0.15s' }}
+    >
+      {getSwipeHint()}
+      <div
+        {...bind()}
+        className={cn(
+          'song-card touch-pan-y select-none',
+          song.isMuted && 'opacity-50',
+          song.isEliminated && 'line-through opacity-30',
+          isAnimating && 'transition-transform duration-150'
         )}
-        {canDemote && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 text-warning"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDemote()
-            }}
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
+        style={{
+          transform: `translateX(${swipeX}px)`,
+          touchAction: 'pan-y',
+        }}
+      >
+        {/* Rank Badge */}
+        {rank !== undefined && (
+          <div className={cn(
+            'h-7 w-7 rounded-lg flex items-center justify-center',
+            'text-xs font-bold',
+            `tier-badge-${tier}`
+          )}>
+            {rank}
+          </div>
         )}
 
-        {/* More Options */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-9 w-9">
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onSelect}>
-              <Info className="h-4 w-4 mr-2" />
-              Details
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onToggleMute}>
-              {song.isMuted ? (
-                <>
-                  <Volume2 className="h-4 w-4 mr-2" />
-                  Unmute
-                </>
-              ) : (
-                <>
-                  <VolumeX className="h-4 w-4 mr-2" />
-                  Mute
-                </>
-              )}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={onRemove}
-              className="text-destructive focus:text-destructive"
+        {/* Song Info */}
+        <div className="flex-1 min-w-0" onClick={onSelect}>
+          <p className="font-medium text-sm truncate">{song.title}</p>
+          <p className="text-xs text-muted-foreground truncate">{song.artist}</p>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="flex items-center gap-0.5">
+          {canPromote && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-success"
+              onClick={(e) => {
+                e.stopPropagation()
+                onPromote()
+              }}
             >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Remove
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <ChevronUp className="h-4 w-4" />
+            </Button>
+          )}
+          {canDemote && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-warning"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDemote()
+              }}
+            >
+              <ChevronDown className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* More Options */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onSelect}>
+                <Info className="h-4 w-4 mr-2" />
+                Details
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onToggleMute}>
+                {song.isMuted ? (
+                  <>
+                    <Volume2 className="h-4 w-4 mr-2" />
+                    Unmute
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="h-4 w-4 mr-2" />
+                    Mute
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={onRemove}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </div>
   )

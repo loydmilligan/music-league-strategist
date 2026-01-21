@@ -254,7 +254,7 @@
     @apply flex items-center justify-center;
     @apply active:scale-90 transition-transform duration-100;
     bottom: calc(80px + env(safe-area-inset-bottom));
-    right: 16px;
+    left: 16px;
   }
 
   /* Progress ring (for funnel visualization) */
