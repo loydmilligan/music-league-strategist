@@ -83,25 +83,21 @@ describe('useServerSync', () => {
     expect(result.current.error).toMatch(/Server unavailable/i)
   })
 
-  it('prompts migration when server empty but local has themes', async () => {
+  it('loads from server successfully', async () => {
     ;(api.health as any).mockResolvedValueOnce({ status: 'ok', timestamp: new Date().toISOString() })
-    ;(api.hasData as any).mockResolvedValueOnce({ hasData: false })
-
-    localStorage.setItem(
-      'music-league-strategist',
-      JSON.stringify({
-        state: {
-          themes: [{ id: 't1', title: 'Theme', rawTheme: 'Theme', candidates: [], semifinalists: [], finalists: [], pick: null }],
-          sessions: [],
-        },
-      })
-    )
+    ;(api.getThemes as any).mockResolvedValueOnce([])
+    ;(api.getSessions as any).mockResolvedValueOnce([])
+    ;(api.getProfile as any).mockResolvedValueOnce(null)
+    ;(api.getSavedSongs as any).mockResolvedValueOnce([])
+    ;(api.getCompetitorAnalysis as any).mockResolvedValueOnce(null)
+    ;(api.getSettings as any).mockResolvedValueOnce(null)
 
     const { result } = renderHook(() => useServerSync())
 
     await waitFor(() => {
-      expect(result.current.migrationNeeded).toBe(true)
+      expect(result.current.isInitialized).toBe(true)
       expect(result.current.isLoading).toBe(false)
+      expect(result.current.error).toBeNull()
     })
   })
 })
