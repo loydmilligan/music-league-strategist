@@ -19,10 +19,11 @@ const JWT_REFRESH_EXPIRES = process.env.JWT_REFRESH_EXPIRES || '7d'
 const APP_URL = process.env.APP_URL || 'http://localhost:5173'
 
 // Email configuration (Gmail SMTP)
+const smtpPort = parseInt(process.env.SMTP_PORT || '587')
 const emailTransporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || '587'),
-  secure: false,
+  port: smtpPort,
+  secure: smtpPort === 465, // true for 465 (SSL), false for 587 (STARTTLS)
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
