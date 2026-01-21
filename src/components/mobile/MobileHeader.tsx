@@ -3,10 +3,12 @@ import {
   ChevronDown,
   Settings,
   Clock,
-  Check
+  Check,
+  LogOut
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
+import { useAuthStore } from '@/stores/authStore'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +38,7 @@ export function MobileHeader({
     activeTheme,
     setActiveTheme
   } = useMusicLeagueStore()
+  const { logout } = useAuthStore()
   const theme = activeTheme()
   const activeThemes = themes.filter((t) => t.status === 'active')
 
@@ -138,6 +141,15 @@ export function MobileHeader({
               </Button>
             }
           />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 text-muted-foreground hover:text-destructive"
+            onClick={() => logout()}
+            title="Sign Out"
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
         </div>
       </div>
     </header>
