@@ -21,6 +21,7 @@ interface SyncState {
   error: string | null
   migrationNeeded: boolean
   isMigrating: boolean
+  migrationSkipped: boolean
 }
 
 // Helper to check if API is available
@@ -80,6 +81,7 @@ export function useServerSync() {
     error: null,
     migrationNeeded: false,
     isMigrating: false,
+    migrationSkipped: false,
   })
 
   const initAttempted = useRef(false)
@@ -125,8 +127,8 @@ export function useServerSync() {
       const localData = getLocalStorageData()
       const hasLocalData = localData && (localData.themes.length > 0 || localData.sessions.length > 0)
 
-      // If server is empty but we have local data, offer migration
-      if (!serverHasData && hasLocalData) {
+      // If server is empty but we have local data, offer migration (unless already skipped)
+      if (!serverHasData && hasLocalData && !state.migrationSkipped) {
         setState((s) => ({
           ...s,
           isLoading: false,
@@ -193,7 +195,7 @@ export function useServerSync() {
         error: message,
       }))
     }
-  }, [setThemesFromServer, setSessionsFromServer, setUserProfile, setSongsILikeFromServer, setCompetitorAnalysis, setOpenRouterKey, setDefaultModel, setSpotify, setYoutubeMusic, setNtfy])
+  }, [setThemesFromServer, setSessionsFromServer, setUserProfile, setSongsILikeFromServer, setCompetitorAnalysis, setOpenRouterKey, setDefaultModel, setSpotify, setYoutubeMusic, setNtfy, state.migrationSkipped])
 
   // Migrate local data to server
   const migrateToServer = useCallback(async () => {
@@ -246,7 +248,7 @@ export function useServerSync() {
 
   // Skip migration and use server (empty start)
   const skipMigration = useCallback(async () => {
-    setState((s) => ({ ...s, migrationNeeded: false }))
+    setState((s) => ({ ...s, migrationNeeded: false, migrationSkipped: true }))
     initAttempted.current = false
     await initialize()
   }, [initialize])
