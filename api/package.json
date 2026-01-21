@@ -7,8 +7,12 @@
     "dev": "node --watch src/index.js"
   },
   "dependencies": {
+    "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "pg": "^8.13.0"
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.8",
+    "pg": "^8.13.0",
+    "uuid": "^9.0.1"
   }
 }

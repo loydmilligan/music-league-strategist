@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Music2, Loader2, RefreshCw, Database, HardDrive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { initializeStoreSync } from '@/stores/storeSync'
@@ -17,8 +18,16 @@ import {
 } from '@/components/mobile'
 import { SongDetailSlideout } from '@/components/SongDetailSlideout'
 import { SettingsModal } from '@/components/SettingsModal'
+import {
+  LoginPage,
+  RegisterPage,
+  ForgotPasswordPage,
+  ResetPasswordPage,
+  VerifyEmailPage,
+  AuthGuard
+} from '@/components/auth'
 
-function App(): React.ReactElement {
+function MainApp(): React.ReactElement {
   const [activeView, setActiveView] = useState<MobileView>('chat')
   const [selectedSong, setSelectedSong] = useState<Song | null>(null)
   const [slideoutOpen, setSlideoutOpen] = useState(false)
@@ -229,6 +238,31 @@ function App(): React.ReactElement {
         onOpenChange={setSlideoutOpen}
       />
     </div>
+  )
+}
+
+function App(): React.ReactElement {
+  return (
+    <BrowserRouter>
+      <Routes>
+        {/* Public auth routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
+
+        {/* Protected app routes */}
+        <Route
+          path="/*"
+          element={
+            <AuthGuard>
+              <MainApp />
+            </AuthGuard>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
