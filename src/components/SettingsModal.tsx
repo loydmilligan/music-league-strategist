@@ -25,6 +25,7 @@ import { useModelsStore } from '@/stores/modelsStore'
 import { ModelsManager } from '@/components/ModelsManager'
 import { Switch } from '@/components/ui/switch'
 import { ntfyService } from '@/services/ntfy'
+import { useSpotifyOAuth } from '@/hooks/useSpotifyOAuth'
 
 interface SettingsModalProps {
   trigger?: React.ReactNode
@@ -60,9 +61,20 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
   const [localYouTube, setLocalYouTube] = useState(youtubeMusic)
   const [localNtfy, setLocalNtfy] = useState(ntfy)
   const [testingSendNotification, setTestingSendNotification] = useState(false)
-  const [spotifyAuthLoading, setSpotifyAuthLoading] = useState(false)
-  const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null)
   const [spotifyServerConfigured, setSpotifyServerConfigured] = useState<boolean | null>(null)
+
+  // Use Spotify OAuth hook
+  const {
+    isLoading: spotifyAuthLoading,
+    error: spotifyOAuthError,
+    startOAuthFlow,
+    handleOAuthCallback,
+    clearError: clearSpotifyError,
+  } = useSpotifyOAuth()
+
+  // Local state for Spotify auth error (merged with hook error)
+  const [spotifyAuthError, setSpotifyAuthError] = useState<string | null>(null)
+  const displayedSpotifyError = spotifyAuthError || spotifyOAuthError
 
   // Check if server has Spotify OAuth configured
   useEffect(() => {
@@ -72,38 +84,25 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
       .catch(() => setSpotifyServerConfigured(false))
   }, [])
 
-  // Handle Spotify OAuth popup message
+  // Handle Spotify OAuth popup message (for desktop popup flow)
   const handleSpotifyMessage = useCallback(
     async (event: MessageEvent) => {
       if (event.data?.type === 'spotify-auth-success' && event.data.code) {
-        setSpotifyAuthLoading(true)
-        setSpotifyAuthError(null)
         try {
-          const response = await fetch('/api/ml/spotify/exchange', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: event.data.code }),
-          })
-          if (!response.ok) {
-            const error = await response.json()
-            throw new Error(error.error || 'Token exchange failed')
-          }
-          const tokens = await response.json()
+          await handleOAuthCallback(event.data.code)
+          // Update local state to reflect the new token
           setLocalSpotify((prev) => ({
             ...prev,
-            refreshToken: tokens.refreshToken,
+            refreshToken: spotify.refreshToken,
           }))
-          setSpotifyAuthError(null)
         } catch (error) {
           setSpotifyAuthError(error instanceof Error ? error.message : 'OAuth failed')
-        } finally {
-          setSpotifyAuthLoading(false)
         }
       } else if (event.data?.type === 'spotify-auth-error') {
         setSpotifyAuthError(event.data.error || 'Authorization failed')
       }
     },
-    []
+    [handleOAuthCallback, spotify.refreshToken]
   )
 
   useEffect(() => {
@@ -111,28 +110,20 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
     return () => window.removeEventListener('message', handleSpotifyMessage)
   }, [handleSpotifyMessage])
 
+  // Sync local Spotify state when store updates
+  useEffect(() => {
+    if (open) {
+      setLocalSpotify(spotify)
+    }
+  }, [open, spotify])
+
   const handleSpotifyConnect = async (): Promise<void> => {
-    setSpotifyAuthLoading(true)
     setSpotifyAuthError(null)
+    clearSpotifyError()
     try {
-      const response = await fetch('/api/ml/spotify/auth-url')
-      if (!response.ok) {
-        throw new Error('Failed to get authorization URL')
-      }
-      const { url } = await response.json()
-      // Open OAuth popup
-      const width = 500
-      const height = 700
-      const left = window.screenX + (window.outerWidth - width) / 2
-      const top = window.screenY + (window.outerHeight - height) / 2
-      window.open(
-        url,
-        'spotify-auth',
-        `width=${width},height=${height},left=${left},top=${top}`
-      )
+      await startOAuthFlow()
     } catch (error) {
       setSpotifyAuthError(error instanceof Error ? error.message : 'Failed to start OAuth')
-      setSpotifyAuthLoading(false)
     }
   }
 
@@ -373,8 +364,8 @@ export function SettingsModal({ trigger }: SettingsModalProps): React.ReactEleme
                       </Button>
                     )}
                   </div>
-                  {spotifyAuthError && (
-                    <p className="text-xs text-red-500">{spotifyAuthError}</p>
+                  {displayedSpotifyError && (
+                    <p className="text-xs text-red-500">{displayedSpotifyError}</p>
                   )}
                 </div>
 

@@ -22,7 +22,7 @@ const OAUTH_REDIRECT_KEY = 'spotify-oauth-redirect'
 function isMobileOrPWA(): boolean {
   // Check if running as PWA
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-  const isIOSStandalone = (window.navigator as any).standalone === true
+  const isIOSStandalone = 'standalone' in window.navigator && (window.navigator as Navigator & { standalone?: boolean }).standalone === true
   
   // Check if mobile device
   const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(

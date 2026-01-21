@@ -2692,36 +2692,88 @@ api.post('/spotify/exchange', async (req, res) => {
   }
 })
 
-// Callback endpoint for OAuth redirect (HTML page that sends code to parent window)
+// Callback endpoint for OAuth redirect
 api.get('/spotify/callback', (req, res) => {
-  const { code, error } = req.query
+  const { code, error, state } = req.query
 
-  // Return an HTML page that sends the code to the opener window
+  // Detect if this is a popup or redirect flow
+  // Popup flow: window.opener exists (desktop browsers)
+  // Redirect flow: window.opener is null (mobile/PWA)
+  
+  // Return an HTML page that handles both flows
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
       <title>Spotify Authorization</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a1a; color: #fff; }
-        .container { text-align: center; padding: 2rem; }
+        body { 
+          font-family: system-ui, sans-serif; 
+          display: flex; 
+          justify-content: center; 
+          align-items: center; 
+          height: 100vh; 
+          margin: 0; 
+          background: #0f0f0f; 
+          color: #fff; 
+        }
+        .container { 
+          text-align: center; 
+          padding: 2rem; 
+          max-width: 400px;
+        }
         .success { color: #1DB954; }
         .error { color: #ff4444; }
+        .spinner {
+          border: 3px solid #333;
+          border-top: 3px solid #1DB954;
+          border-radius: 50%;
+          width: 40px;
+          height: 40px;
+          animation: spin 1s linear infinite;
+          margin: 1rem auto;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       </style>
     </head>
     <body>
       <div class="container">
         ${error
           ? `<h2 class="error">Authorization Failed</h2><p>${error}</p>`
-          : `<h2 class="success">Authorization Successful!</h2><p>You can close this window.</p>`
+          : `<h2 class="success">Authorization Successful!</h2><div class="spinner"></div><p>Redirecting...</p>`
         }
       </div>
       <script>
-        ${error
-          ? `window.opener?.postMessage({ type: 'spotify-auth-error', error: '${error}' }, '*');`
-          : `window.opener?.postMessage({ type: 'spotify-auth-success', code: '${code}' }, '*');`
-        }
-        setTimeout(() => window.close(), 2000);
+        (function() {
+          const code = '${code || ''}';
+          const error = '${error || ''}';
+          const state = '${state || ''}';
+          
+          // Try popup flow first (desktop)
+          if (window.opener && !window.opener.closed) {
+            console.log('[Spotify OAuth] Using popup flow');
+            if (error) {
+              window.opener.postMessage({ type: 'spotify-auth-error', error }, '*');
+            } else {
+              window.opener.postMessage({ type: 'spotify-auth-success', code }, '*');
+            }
+            setTimeout(() => window.close(), 2000);
+          } else {
+            // Redirect flow (mobile/PWA)
+            console.log('[Spotify OAuth] Using redirect flow');
+            if (error) {
+              // Redirect back to app with error
+              window.location.href = '/?error=' + encodeURIComponent(error);
+            } else {
+              // Redirect back to app with code
+              window.location.href = '/?code=' + encodeURIComponent(code) + (state ? '&state=' + encodeURIComponent(state) : '');
+            }
+          }
+        })();
       </script>
     </body>
     </html>
