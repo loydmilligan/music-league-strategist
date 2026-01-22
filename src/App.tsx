@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { initializeStoreSync } from '@/stores/storeSync'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useServerSync } from '@/hooks/useServerSync'
+import { useInactivityLogout } from '@/hooks/useInactivityLogout'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import { useSpotifyOAuth } from '@/hooks/useSpotifyOAuth'
 import type { Song } from '@/types/musicLeague'
@@ -41,6 +42,9 @@ function MainApp(): React.ReactElement {
   const theme = activeTheme()
 
   const { handleOAuthCallback } = useSpotifyOAuth()
+
+  // Auto-logout after 30 minutes of inactivity
+  useInactivityLogout({ timeoutMs: 30 * 60 * 1000 })
 
   // Handle Spotify OAuth callback redirect
   useEffect(() => {
@@ -104,7 +108,7 @@ function MainApp(): React.ReactElement {
     setActiveView('funnel')
   }, [])
 
-  // Show loading state
+  // Show loading state while syncing data from server
   if (isLoading) {
     return (
       <div className="flex h-screen-dynamic flex-col items-center justify-center bg-background text-foreground">
@@ -112,7 +116,8 @@ function MainApp(): React.ReactElement {
           <div className="h-16 w-16 rounded-2xl bg-primary/20 flex items-center justify-center animate-pulse-glow">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Syncing your data...</p>
+          <p className="text-xs text-muted-foreground/70">Loading themes and settings</p>
         </div>
       </div>
     )

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { Loader2, Music2 } from 'lucide-react'
-import { useAuthStore } from '@/stores/authStore'
+import { useAuthStore, waitForAuthHydration } from '@/stores/authStore'
 import { cn } from '@/lib/utils'
 
 interface AuthGuardProps {
@@ -10,18 +10,25 @@ interface AuthGuardProps {
 
 export function AuthGuard({ children }: AuthGuardProps): React.ReactElement {
   const location = useLocation()
-  const { isAuthenticated, accessToken, refreshAccessToken, fetchCurrentUser } = useAuthStore()
+  const { isAuthenticated, refreshAccessToken, fetchCurrentUser, _hasHydrated } = useAuthStore()
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (accessToken && !isAuthenticated) {
+      // CRITICAL: Wait for auth store to hydrate from localStorage first
+      // Without this, we might redirect to login even if the user has a valid token
+      await waitForAuthHydration()
+
+      // Now get the actual hydrated values
+      const state = useAuthStore.getState()
+
+      if (state.accessToken && !state.isAuthenticated) {
         // We have a token but no user, try to refresh
         const refreshed = await refreshAccessToken()
         if (refreshed) {
           await fetchCurrentUser()
         }
-      } else if (accessToken && isAuthenticated) {
+      } else if (state.accessToken && state.isAuthenticated) {
         // Verify the user is still valid
         await fetchCurrentUser()
       }
@@ -29,7 +36,7 @@ export function AuthGuard({ children }: AuthGuardProps): React.ReactElement {
     }
 
     checkAuth()
-  }, [accessToken, isAuthenticated, refreshAccessToken, fetchCurrentUser])
+  }, [refreshAccessToken, fetchCurrentUser])
 
   // Show loading state while checking authentication
   if (isChecking) {
@@ -47,8 +54,8 @@ export function AuthGuard({ children }: AuthGuardProps): React.ReactElement {
     )
   }
 
-  // If not authenticated, redirect to login
-  if (!isAuthenticated) {
+  // If not authenticated after hydration check, redirect to login
+  if (!isAuthenticated && _hasHydrated) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
