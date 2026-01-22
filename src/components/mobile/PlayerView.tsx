@@ -1,20 +1,27 @@
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from 'react'
 import {
   Play,
+  Pause,
   SkipForward,
   SkipBack,
   Disc3,
   Music2,
   ListMusic,
   Heart,
-  Shuffle
+  Shuffle,
+  Volume2,
+  Smartphone,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
+import { useSpotifyPlayer } from '@/hooks/useSpotifyPlayer'
 import type { Song, FunnelTier } from '@/types/musicLeague'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Slider } from '@/components/ui/slider'
 
 type PlaylistSource = 'funnel' | 'liked'
 
@@ -45,6 +52,7 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
   const [activeTab, setActiveTab] = useState<PlaylistSource>('funnel')
   const [currentSongIndex, setCurrentSongIndex] = useState(0)
   const [isShuffled, setIsShuffled] = useState(false)
+  const [useSDKPlayer, setUseSDKPlayer] = useState(false)
 
   const {
     activeTheme,
@@ -52,6 +60,9 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
     addToSongsILike,
     removeFromSongsILike
   } = useMusicLeagueStore()
+
+  // Spotify Web Playback SDK
+  const spotifyPlayer = useSpotifyPlayer()
 
   const theme = activeTheme()
 
@@ -153,17 +164,90 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
     )
   }
 
+  // Handle SDK playback
+  const handleSDKPlay = useCallback(async () => {
+    if (!currentSong?.spotifyUri && !currentSong?.spotifyTrackId) return
+
+    const uri = currentSong.spotifyUri || `spotify:track:${currentSong.spotifyTrackId}`
+    await spotifyPlayer.play(uri)
+  }, [currentSong, spotifyPlayer])
+
+  const handleTransferAndPlay = useCallback(async () => {
+    const success = await spotifyPlayer.transferPlayback()
+    if (success) {
+      setUseSDKPlayer(true)
+      // Play current song after transfer
+      if (currentSong?.spotifyTrackId) {
+        setTimeout(() => {
+          handleSDKPlay()
+        }, 500)
+      }
+    }
+  }, [spotifyPlayer, currentSong, handleSDKPlay])
+
+  // Format time for progress display
+  const formatTime = (ms: number) => {
+    const seconds = Math.floor(ms / 1000)
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Now Playing */}
       <div className="flex-1 flex flex-col items-center justify-center p-6">
-        {/* Album Art / Spotify Embed */}
+        {/* SDK Player Status Banner */}
+        {spotifyPlayer.isReady && !useSDKPlayer && spotifyPlayer.isPremium && (
+          <div className="w-full max-w-sm mb-4">
+            <Button
+              variant="outline"
+              className="w-full h-12 gap-2"
+              onClick={handleTransferAndPlay}
+              disabled={spotifyPlayer.isTransferring}
+            >
+              {spotifyPlayer.isTransferring ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Smartphone className="h-4 w-4" />
+              )}
+              Play on this device (full tracks)
+            </Button>
+          </div>
+        )}
+
+        {/* SDK Error Banner */}
+        {spotifyPlayer.error && (
+          <div className="w-full max-w-sm mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            {spotifyPlayer.error}
+          </div>
+        )}
+
+        {/* Album Art / Player */}
         <div className="w-full max-w-sm mb-6">
-          {currentSong?.spotifyTrackId ? (
+          {useSDKPlayer && spotifyPlayer.isPlaying && spotifyPlayer.currentTrack ? (
+            // SDK Player - Album Art from current track
+            <div className="aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
+              {spotifyPlayer.currentTrack.album.images[0] ? (
+                <img
+                  src={spotifyPlayer.currentTrack.album.images[0].url}
+                  alt={spotifyPlayer.currentTrack.album.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Music2 className="h-24 w-24 text-primary/50" />
+                </div>
+              )}
+            </div>
+          ) : currentSong?.spotifyTrackId && !useSDKPlayer ? (
+            // Embed player (fallback)
             <SpotifyEmbed
               trackId={currentSong.spotifyTrackId}
             />
           ) : (
+            // No song - vinyl animation
             <div className="aspect-square rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
               <div className="vinyl-ring h-48 w-48 animate-vinyl-spin">
                 <div className="absolute inset-12 rounded-full bg-background flex items-center justify-center">
@@ -176,14 +260,45 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
 
         {/* Song Info */}
         <div className="text-center mb-6 w-full max-w-sm">
-          <h2 className="font-display text-xl truncate">{currentSong?.title}</h2>
-          <p className="text-muted-foreground truncate">{currentSong?.artist}</p>
-          {currentSong?.album && (
-            <p className="text-sm text-muted-foreground/60 truncate mt-1">
-              {currentSong.album} {currentSong.year && `(${currentSong.year})`}
-            </p>
+          {useSDKPlayer && spotifyPlayer.currentTrack ? (
+            <>
+              <h2 className="font-display text-xl truncate">{spotifyPlayer.currentTrack.name}</h2>
+              <p className="text-muted-foreground truncate">
+                {spotifyPlayer.currentTrack.artists.map(a => a.name).join(', ')}
+              </p>
+              <p className="text-sm text-muted-foreground/60 truncate mt-1">
+                {spotifyPlayer.currentTrack.album.name}
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="font-display text-xl truncate">{currentSong?.title}</h2>
+              <p className="text-muted-foreground truncate">{currentSong?.artist}</p>
+              {currentSong?.album && (
+                <p className="text-sm text-muted-foreground/60 truncate mt-1">
+                  {currentSong.album} {currentSong.year && `(${currentSong.year})`}
+                </p>
+              )}
+            </>
           )}
         </div>
+
+        {/* Progress Bar (SDK only) */}
+        {useSDKPlayer && spotifyPlayer.duration > 0 && (
+          <div className="w-full max-w-sm mb-4">
+            <Slider
+              value={[spotifyPlayer.position]}
+              max={spotifyPlayer.duration}
+              step={1000}
+              onValueChange={([value]) => spotifyPlayer.seek(value)}
+              className="w-full"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>{formatTime(spotifyPlayer.position)}</span>
+              <span>{formatTime(spotifyPlayer.duration)}</span>
+            </div>
+          </div>
+        )}
 
         {/* Controls */}
         <div className="flex items-center gap-4">
@@ -202,21 +317,26 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
             variant="ghost"
             size="icon"
             className="h-12 w-12 rounded-full"
-            onClick={handlePrev}
+            onClick={useSDKPlayer ? spotifyPlayer.previousTrack : handlePrev}
           >
             <SkipBack className="h-6 w-6" />
           </Button>
           <Button
             size="icon"
             className="h-16 w-16 rounded-full glow-primary"
+            onClick={useSDKPlayer ? spotifyPlayer.togglePlay : handleSDKPlay}
           >
-            <Play className="h-8 w-8 ml-1" />
+            {useSDKPlayer && spotifyPlayer.isPlaying ? (
+              <Pause className="h-8 w-8" />
+            ) : (
+              <Play className="h-8 w-8 ml-1" />
+            )}
           </Button>
           <Button
             variant="ghost"
             size="icon"
             className="h-12 w-12 rounded-full"
-            onClick={handleNext}
+            onClick={useSDKPlayer ? spotifyPlayer.nextTrack : handleNext}
           >
             <SkipForward className="h-6 w-6" />
           </Button>
@@ -235,6 +355,20 @@ export function PlayerView({ initialSong }: PlayerViewProps): React.ReactElement
             )} />
           </Button>
         </div>
+
+        {/* Volume Control (SDK only) */}
+        {useSDKPlayer && (
+          <div className="flex items-center gap-3 w-full max-w-sm mt-4">
+            <Volume2 className="h-4 w-4 text-muted-foreground" />
+            <Slider
+              value={[spotifyPlayer.volume * 100]}
+              max={100}
+              step={1}
+              onValueChange={([value]) => spotifyPlayer.setVolume(value / 100)}
+              className="flex-1"
+            />
+          </div>
+        )}
       </div>
 
       {/* Playlist Selector */}

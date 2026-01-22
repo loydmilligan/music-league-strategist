@@ -2623,6 +2623,10 @@ const SPOTIFY_SCOPES = [
   'playlist-modify-private',
   'user-library-read',
   'user-read-private',
+  // Web Playback SDK scopes for full playback control
+  'streaming',
+  'user-read-playback-state',
+  'user-modify-playback-state',
 ].join(' ')
 
 // Get Spotify authorization URL

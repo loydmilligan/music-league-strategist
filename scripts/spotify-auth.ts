@@ -41,7 +41,7 @@ const CLIENT_ID = process.env.VITE_SPOTIFY_CLIENT_ID
 const CLIENT_SECRET = process.env.VITE_SPOTIFY_CLIENT_SECRET
 const REDIRECT_URI = process.env.VITE_SPOTIFY_CALLBACK_URL
 
-// Scopes needed for playlist management
+// Scopes needed for playlist management and playback
 const SCOPES = [
   'playlist-read-private',
   'playlist-read-collaborative',
@@ -49,6 +49,10 @@ const SCOPES = [
   'playlist-modify-private',
   'user-library-read',
   'user-read-private',
+  // Web Playback SDK scopes for full playback control
+  'streaming',
+  'user-read-playback-state',
+  'user-modify-playback-state',
 ].join(' ')
 
 function prompt(question: string): Promise<string> {
