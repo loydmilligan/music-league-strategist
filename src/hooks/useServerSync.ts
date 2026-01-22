@@ -7,6 +7,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { api, ApiError } from '@/services/api'
+import { waitForAuthHydration } from '@/stores/authStore'
 import type {
   MusicLeagueTheme,
   MusicLeagueSession,
@@ -108,6 +109,10 @@ export function useServerSync() {
     setState((s) => ({ ...s, isLoading: true, error: null }))
 
     try {
+      // Wait for auth store to hydrate before making API calls
+      // This prevents 401 errors when the token hasn't loaded from localStorage yet
+      await waitForAuthHydration()
+
       // Check if API is available
       const apiAvailable = await isApiAvailable()
 

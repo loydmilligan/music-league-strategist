@@ -16,12 +16,14 @@ interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
   error: string | null
+  _hasHydrated: boolean
 
   // Actions
   setUser: (user: User | null) => void
   setTokens: (accessToken: string | null, refreshToken: string | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+  setHasHydrated: (hasHydrated: boolean) => void
   login: (email: string, password: string) => Promise<boolean>
   register: (email: string, password: string) => Promise<{ success: boolean; message?: string }>
   logout: () => Promise<void>
@@ -47,6 +49,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       error: null,
+      _hasHydrated: false,
 
       // Actions
       setUser: (user) => set({ user, isAuthenticated: !!user }),
@@ -56,6 +59,8 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (isLoading) => set({ isLoading }),
 
       setError: (error) => set({ error }),
+
+      setHasHydrated: (hasHydrated) => set({ _hasHydrated: hasHydrated }),
 
       login: async (email, password) => {
         set({ isLoading: true, error: null })
@@ -305,9 +310,30 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true)
+      },
     }
   )
 )
+
+// Helper function to wait for auth store hydration
+export const waitForAuthHydration = (): Promise<void> => {
+  return new Promise((resolve) => {
+    // If already hydrated, resolve immediately
+    if (useAuthStore.getState()._hasHydrated) {
+      resolve()
+      return
+    }
+    // Otherwise wait for hydration
+    const unsubscribe = useAuthStore.subscribe((state) => {
+      if (state._hasHydrated) {
+        unsubscribe()
+        resolve()
+      }
+    })
+  })
+}
 
 // Helper function to get auth header for API calls
 export const getAuthHeader = (): Record<string, string> => {

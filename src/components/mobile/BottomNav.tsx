@@ -67,13 +67,14 @@ export function BottomNav({
 
   return (
     <>
-      {/* Floating Action Button for new conversation */}
-      <Sheet open={quickActionsOpen} onOpenChange={setQuickActionsOpen}>
-        <SheetTrigger asChild>
-          <button className="fab glow-primary">
-            <Plus className="h-6 w-6" />
-          </button>
-        </SheetTrigger>
+      {/* Floating Action Button for new conversation - hidden on chat view to avoid overlapping submit button */}
+      {activeView !== 'chat' && (
+        <Sheet open={quickActionsOpen} onOpenChange={setQuickActionsOpen}>
+          <SheetTrigger asChild>
+            <button className="fab glow-primary">
+              <Plus className="h-6 w-6" />
+            </button>
+          </SheetTrigger>
         <SheetContent side="bottom" className="rounded-t-3xl">
           <div className="mx-auto mt-2 h-1 w-12 rounded-full bg-muted" />
           <div className="py-6 space-y-3">
@@ -115,7 +116,8 @@ export function BottomNav({
             )}
           </div>
         </SheetContent>
-      </Sheet>
+        </Sheet>
+      )}
 
       {/* Bottom Navigation Bar */}
       <nav className="bottom-nav">
