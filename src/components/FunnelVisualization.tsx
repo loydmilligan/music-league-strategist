@@ -14,6 +14,8 @@ import {
   Volume2,
   FileDown,
   FileUp,
+  Play,
+  ListMusic,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -29,6 +31,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
+import { queueSongs, playSong } from '@/services/musicAssistant'
 import type { Song, FunnelTier, MusicLeagueTheme } from '@/types/musicLeague'
 import { FUNNEL_TIER_LIMITS } from '@/types/musicLeague'
 import { cn } from '@/lib/utils'
@@ -111,6 +114,7 @@ interface SongCardProps {
   compact?: boolean
   showRank?: boolean
   onInfoClick?: (song: Song) => void
+  onPlayClick?: (song: Song) => void
   onMoveUp?: () => void
   onMoveDown?: () => void
   isFirst?: boolean
@@ -124,6 +128,7 @@ function SongCard({
   compact,
   showRank,
   onInfoClick,
+  onPlayClick,
   onMoveUp,
   onMoveDown,
   isFirst,
@@ -364,6 +369,17 @@ function SongCard({
               <ChevronDown className="h-4 w-4 text-orange-500" />
             </Button>
           )}
+          {onPlayClick && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={() => onPlayClick(song)}
+              title="Play in Music Assistant"
+            >
+              <Play className="h-4 w-4 text-green-500" />
+            </Button>
+          )}
           <a
             href={getYouTubeUrl(song)}
             target="_blank"
@@ -400,9 +416,11 @@ interface TierSectionProps {
   themeId: string
   compact?: boolean
   onSongClick?: (song: Song) => void
+  onPlaySong?: (song: Song) => void
+  onQueueAll?: (songs: Song[]) => void
 }
 
-function TierSection({ config, songs, themeId, compact, onSongClick }: TierSectionProps): React.ReactElement {
+function TierSection({ config, songs, themeId, compact, onSongClick, onPlaySong, onQueueAll }: TierSectionProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(true)
   const { reorderSongsInTier } = useMusicLeagueStore()
   const limit = FUNNEL_TIER_LIMITS[config.tier]
@@ -467,12 +485,36 @@ function TierSection({ config, songs, themeId, compact, onSongClick }: TierSecti
               {config.label}
             </span>
           </div>
-          <Badge
-            variant={isFull ? 'destructive' : 'secondary'}
-            className="text-xs"
-          >
-            {count}/{limit}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {onQueueAll && songs.length > 0 && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onQueueAll(songs)
+                      }}
+                    >
+                      <ListMusic className="h-4 w-4 text-green-500" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Queue all {songs.length} songs in Music Assistant
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <Badge
+              variant={isFull ? 'destructive' : 'secondary'}
+              className="text-xs"
+            >
+              {count}/{limit}
+            </Badge>
+          </div>
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -496,6 +538,7 @@ function TierSection({ config, songs, themeId, compact, onSongClick }: TierSecti
                 compact={compact}
                 showRank={showRank}
                 onInfoClick={onSongClick}
+                onPlayClick={onPlaySong}
                 onMoveUp={showRank ? () => handleMoveUp(song.id) : undefined}
                 onMoveDown={showRank ? () => handleMoveDown(song.id) : undefined}
                 isFirst={index === 0}
@@ -537,6 +580,39 @@ export function FunnelVisualization({
   const { getHallPassesAvailable, computeThemePhase, updateTheme } = useMusicLeagueStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [maStatus, setMaStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  // Music Assistant handlers
+  const handlePlaySong = useCallback(async (song: Song) => {
+    try {
+      const result = await playSong(song)
+      if (result.success && result.added_count > 0) {
+        setMaStatus({ message: `Playing: ${song.artist} - ${song.title}`, type: 'success' })
+      } else if (result.missing_count > 0) {
+        setMaStatus({ message: `Song not found: ${song.title}`, type: 'error' })
+      }
+      setTimeout(() => setMaStatus(null), 3000)
+    } catch (error) {
+      setMaStatus({ message: 'Could not connect to Music Assistant', type: 'error' })
+      setTimeout(() => setMaStatus(null), 3000)
+    }
+  }, [])
+
+  const handleQueueAll = useCallback(async (songs: Song[]) => {
+    try {
+      const result = await queueSongs(songs)
+      if (result.success) {
+        const msg = result.missing_count > 0
+          ? `Queued ${result.added_count} songs (${result.missing_count} not found)`
+          : `Queued ${result.added_count} songs`
+        setMaStatus({ message: msg, type: result.missing_count > 0 ? 'error' : 'success' })
+      }
+      setTimeout(() => setMaStatus(null), 3000)
+    } catch (error) {
+      setMaStatus({ message: 'Could not connect to Music Assistant', type: 'error' })
+      setTimeout(() => setMaStatus(null), 3000)
+    }
+  }, [])
 
   const getSongsForTier = (tier: FunnelTier): Song[] => {
     switch (tier) {
@@ -717,6 +793,16 @@ export function FunnelVisualization({
         </div>
       )}
 
+      {/* Music Assistant Status */}
+      {maStatus && (
+        <div className={cn(
+          "text-xs rounded px-2 py-1 transition-all",
+          maStatus.type === 'success' ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
+        )}>
+          {maStatus.message}
+        </div>
+      )}
+
       {/* Hall Pass Indicators (Feature 4) */}
       {!compact && (currentPhase === 'refine' || currentPhase === 'decide') && (
         <div className="flex items-center gap-2 text-xs">
@@ -774,6 +860,8 @@ export function FunnelVisualization({
           themeId={theme.id}
           compact={compact}
           onSongClick={onSongClick}
+          onPlaySong={handlePlaySong}
+          onQueueAll={handleQueueAll}
         />
       ))}
     </div>
