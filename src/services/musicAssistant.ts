@@ -1,11 +1,12 @@
 /**
  * Music Assistant API Service
  * Integrates with Lyric Scroll API for Home Assistant Music Assistant playback
+ * Proxied through backend to avoid CORS/network issues
  */
 
 import type { Song } from '../types/musicLeague'
 
-const MA_API_URL = 'http://192.168.6.8:8099'
+const API_BASE = '/api/ml'
 const DEFAULT_PLAYER = 'media_player.office_2'
 
 export interface QueueResult {
@@ -31,6 +32,20 @@ export function formatTrack(song: Song | { artist: string; title: string }): str
 }
 
 /**
+ * Get auth token from localStorage
+ */
+function getAuthToken(): string | null {
+  const authData = localStorage.getItem('auth-storage')
+  if (!authData) return null
+  try {
+    const parsed = JSON.parse(authData)
+    return parsed.state?.accessToken || null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Queue tracks on Music Assistant player
  * @param tracks Array of track queries in "Artist - Song Title" format
  * @param enqueue Queue behavior: 'play' (replace), 'add' (append), 'next' (play after current)
@@ -41,10 +56,16 @@ export async function queueTracks(
   enqueue: 'play' | 'add' | 'next' = 'play',
   entityId: string = DEFAULT_PLAYER
 ): Promise<QueueResult> {
-  const response = await fetch(`${MA_API_URL}/api/ma/queue`, {
+  const token = getAuthToken()
+  if (!token) {
+    throw new Error('Not authenticated')
+  }
+
+  const response = await fetch(`${API_BASE}/ma/queue`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({
       entity_id: entityId,
@@ -54,7 +75,8 @@ export async function queueTracks(
   })
 
   if (!response.ok) {
-    throw new Error(`Music Assistant API error: ${response.status}`)
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || `Music Assistant API error: ${response.status}`)
   }
 
   return response.json()

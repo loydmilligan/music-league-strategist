@@ -2797,6 +2797,49 @@ api.get('/spotify/status', (req, res) => {
 })
 
 // ============================================================================
+// MUSIC ASSISTANT PROXY
+// ============================================================================
+
+const MA_API_URL = process.env.MA_API_URL || 'http://192.168.6.8:8099'
+
+// Proxy queue request to Music Assistant
+api.post('/ma/queue', authenticateToken, async (req, res) => {
+  try {
+    const { entity_id, tracks, enqueue } = req.body
+
+    if (!tracks || !Array.isArray(tracks)) {
+      return res.status(400).json({ error: 'tracks array required' })
+    }
+
+    const response = await fetch(`${MA_API_URL}/api/ma/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entity_id: entity_id || 'media_player.office_2',
+        tracks,
+        enqueue: enqueue || 'play'
+      })
+    })
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        success: false,
+        error: `Music Assistant API error: ${response.status}`
+      })
+    }
+
+    const result = await response.json()
+    res.json(result)
+  } catch (error) {
+    console.error('Music Assistant proxy error:', error)
+    res.status(503).json({
+      success: false,
+      error: 'Music Assistant unavailable'
+    })
+  }
+})
+
+// ============================================================================
 // START SERVER
 // ============================================================================
 

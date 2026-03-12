@@ -73,7 +73,7 @@ export function MobileHeader({
                 <button className="flex-1 min-w-0 flex items-center gap-2 text-left">
                   <div className="min-w-0 flex-1">
                     <h1 className="font-display text-sm truncate">
-                      {theme?.title || title || 'ML Strategist'}
+                      {theme?.title || title || 'ML Strategist'} <span className="text-[10px] text-muted-foreground font-normal">v1.1.0</span>
                     </h1>
                     <div className="flex items-center gap-2">
                       {subtitle && (
