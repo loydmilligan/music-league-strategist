@@ -12,7 +12,8 @@ import {
   Trash2,
   Volume2,
   VolumeX,
-  Info
+  Info,
+  ListMusic
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
@@ -28,6 +29,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { PlaylistSyncPanel } from '@/components/PlaylistSyncPanel'
+import { queueSongs, playSong } from '@/services/musicAssistant'
 
 const TIER_CONFIG = {
   pick: {
@@ -69,6 +71,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
     new Set(['pick', 'finalists'])
   )
   const [playlistPanelOpen, setPlaylistPanelOpen] = useState(false)
+  const [maStatus, setMaStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   const {
     activeTheme,
@@ -182,6 +185,38 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
     toggleMuted(theme.id, song.id)
   }
 
+  // Music Assistant handlers
+  const handleQueueTier = async (tier: FunnelTier) => {
+    const songs = getSongsForTier(tier)
+    if (songs.length === 0) return
+
+    try {
+      const result = await queueSongs(songs)
+      if (result.success) {
+        setMaStatus({ message: `Queued ${result.added_count} song${result.added_count !== 1 ? 's' : ''}`, type: 'success' })
+      } else {
+        setMaStatus({ message: 'Failed to queue songs', type: 'error' })
+      }
+    } catch {
+      setMaStatus({ message: 'Music Assistant unavailable', type: 'error' })
+    }
+    setTimeout(() => setMaStatus(null), 3000)
+  }
+
+  const handlePlaySong = async (song: Song) => {
+    try {
+      const result = await playSong(song)
+      if (result.success) {
+        setMaStatus({ message: `Playing ${song.title}`, type: 'success' })
+      } else {
+        setMaStatus({ message: 'Failed to play song', type: 'error' })
+      }
+    } catch {
+      setMaStatus({ message: 'Music Assistant unavailable', type: 'error' })
+    }
+    setTimeout(() => setMaStatus(null), 3000)
+  }
+
   // Calculate total songs
   const totalSongs = theme
     ? (theme.pick ? 1 : 0) +
@@ -255,6 +290,16 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
             )
           })}
         </div>
+
+        {/* Music Assistant Status */}
+        {maStatus && (
+          <div className={cn(
+            'mt-2 px-3 py-1.5 rounded-lg text-xs text-center',
+            maStatus.type === 'success' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'
+          )}>
+            {maStatus.message}
+          </div>
+        )}
       </div>
 
       {/* Funnel Tiers */}
@@ -276,15 +321,17 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
                 )}
               >
                 {/* Tier Header */}
-                <button
-                  onClick={() => toggleTier(tier)}
+                <div
                   className={cn(
-                    'w-full flex items-center justify-between p-4',
+                    'flex items-center justify-between p-4',
                     'transition-colors duration-200',
                     songs.length > 0 ? 'bg-card' : 'bg-transparent'
                   )}
                 >
-                  <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => toggleTier(tier)}
+                    className="flex items-center gap-3 flex-1"
+                  >
                     <div className={cn(
                       'h-10 w-10 rounded-xl flex items-center justify-center',
                       `tier-badge-${tier}`
@@ -305,14 +352,29 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
                       </div>
                       <p className="text-xs text-muted-foreground">{config.description}</p>
                     </div>
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {songs.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        onClick={() => handleQueueTier(tier)}
+                        title="Queue all in Music Assistant"
+                      >
+                        <ListMusic className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {songs.length > 0 && (
+                      <button onClick={() => toggleTier(tier)}>
+                        <ChevronDown className={cn(
+                          'h-5 w-5 text-muted-foreground transition-transform',
+                          isExpanded && 'rotate-180'
+                        )} />
+                      </button>
+                    )}
                   </div>
-                  {songs.length > 0 && (
-                    <ChevronDown className={cn(
-                      'h-5 w-5 text-muted-foreground transition-transform',
-                      isExpanded && 'rotate-180'
-                    )} />
-                  )}
-                </button>
+                </div>
 
                 {/* Songs */}
                 {isExpanded && songs.length > 0 && (
@@ -328,6 +390,7 @@ export function FunnelView({ onSongSelect }: FunnelViewProps): React.ReactElemen
                         onRemove={() => handleRemove(song, tier)}
                         onToggleMute={() => handleToggleMute(song)}
                         onSelect={() => onSongSelect?.(song)}
+                        onPlay={() => handlePlaySong(song)}
                         canPromote={!!getNextTier(tier)}
                         canDemote={!!getPrevTier(tier)}
                         onSwipeAction={(direction, timestamp) => handleSwipeAction(song, tier, direction, timestamp)}
@@ -353,6 +416,7 @@ interface SwipeableSongCardProps {
   onRemove: () => void
   onToggleMute: () => void
   onSelect: () => void
+  onPlay: () => void
   canPromote: boolean
   canDemote: boolean
   onSwipeAction: (direction: 'left' | 'right', timestamp: number) => void
@@ -367,6 +431,7 @@ function SwipeableSongCard({
   onRemove,
   onToggleMute,
   onSelect,
+  onPlay,
   canPromote,
   canDemote,
   onSwipeAction
@@ -542,6 +607,11 @@ function SwipeableSongCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onPlay}>
+                <Play className="h-4 w-4 mr-2" />
+                Play in Music Assistant
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onSelect}>
                 <Info className="h-4 w-4 mr-2" />
                 Details
