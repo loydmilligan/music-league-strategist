@@ -4,7 +4,8 @@ import {
   Settings,
   Clock,
   Check,
-  LogOut
+  LogOut,
+  Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useMusicLeagueStore } from '@/stores/musicLeagueStore'
@@ -36,7 +37,8 @@ export function MobileHeader({
     themes,
     activeThemeId,
     activeTheme,
-    setActiveTheme
+    setActiveTheme,
+    createTheme
   } = useMusicLeagueStore()
   const { logout } = useAuthStore()
   const theme = activeTheme()
@@ -44,6 +46,11 @@ export function MobileHeader({
 
   // Show deadline indicator if theme has a deadline (without calculating days to avoid impure Date.now())
   const hasDeadline = Boolean(theme?.deadline)
+
+  const handleNewTheme = () => {
+    const id = createTheme('')
+    setActiveTheme(id)
+  }
 
   return (
     <header className="glass sticky top-0 z-40 px-4 py-3">
@@ -108,12 +115,9 @@ export function MobileHeader({
                     <DropdownMenuSeparator />
                   </>
                 ) : null}
-                <DropdownMenuItem
-                  onClick={() => {
-                    // Will be handled by parent
-                  }}
-                >
-                  <span className="text-primary">+ New Theme</span>
+                <DropdownMenuItem onClick={handleNewTheme}>
+                  <Plus className="h-4 w-4 mr-2 text-primary" />
+                  <span className="text-primary">New Theme</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -134,6 +138,15 @@ export function MobileHeader({
         {/* Right: Actions */}
         <div className="flex items-center gap-1 flex-shrink-0">
           {rightAction}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10"
+            onClick={handleNewTheme}
+            title="New Theme"
+          >
+            <Plus className="h-5 w-5" />
+          </Button>
           <SettingsModal
             trigger={
               <Button variant="ghost" size="icon" className="h-10 w-10">

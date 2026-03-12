@@ -241,6 +241,13 @@ export function ProfileView(): React.ReactElement {
               </div>
             </button>
           </div>
+
+          {/* Version Footer */}
+          <div className="py-6 text-center">
+            <p className="text-xs text-muted-foreground/50">
+              Music League Strategist v1.1.0
+            </p>
+          </div>
         </div>
       </ScrollArea>
 
