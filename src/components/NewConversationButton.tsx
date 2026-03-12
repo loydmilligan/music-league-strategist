@@ -35,8 +35,8 @@ export function NewConversationButton({ className }: NewConversationButtonProps)
   const activeThemes = themes.filter((t) => t.status === 'active')
 
   const handleNewTheme = (): void => {
-    // Create a new theme - user will type the theme in the chat
-    const id = createTheme('New Theme')
+    // Create a new theme with empty rawTheme - AI will ask for theme
+    const id = createTheme('')
     setActiveTheme(id)
     setOpen(false)
   }

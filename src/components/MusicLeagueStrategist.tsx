@@ -359,6 +359,16 @@ export function MusicLeagueStrategist(): React.ReactElement {
           }
         }
 
+        // Update theme title if AI extracted one
+        if (parsed.themeTitle && currentTheme) {
+          updateTheme(currentTheme.id, { title: parsed.themeTitle })
+        }
+
+        // If this was the first message and theme had placeholder, update rawTheme too
+        if (currentTheme && (!currentTheme.rawTheme || currentTheme.rawTheme.trim() === '')) {
+          updateTheme(currentTheme.id, { rawTheme: userMessage })
+        }
+
         // Handle extracted preferences from AI response
         if (parsed.extractedPreferences && parsed.extractedPreferences.length > 0) {
           const sessionPrefs: SessionPreference[] = parsed.extractedPreferences.map((p) => ({

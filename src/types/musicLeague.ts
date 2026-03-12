@@ -229,6 +229,8 @@ export interface AIConversationResponse {
   }>
   message: string           // Conversational response text
   interpretation?: string   // Theme interpretation (first response only)
+  themeTitle?: string       // Concise theme title extracted from user input
+  needsTheme?: boolean      // True if AI needs theme before proceeding
   action?: 'create_playlist:spotify' | 'create_playlist:youtube' | 'enter_finalists' | 'finalize_pick' | 'save_to_liked' | null
   // Song to save when action is 'save_to_liked'
   songToSave?: {
@@ -272,6 +274,24 @@ export const MUSIC_LEAGUE_PROMPTS = {
 OBJECTIVE: Help the player pick the perfect song for their Music League round through iterative refinement.
 TONE: Direct, insightful, slightly provocative. Push back. Challenge assumptions.
 
+=== THEME HANDLING (CRITICAL) ===
+Before suggesting ANY songs, you MUST have a clear theme. Check the CURRENT THEME section below.
+
+If NO THEME IS SET (rawTheme is empty or says "New Theme"):
+1. DO NOT suggest any candidates yet
+2. Ask the player: "What's the theme for this Music League round?"
+3. Set "needsTheme": true in your response
+4. Wait for the player to provide a theme before proceeding
+
+When the player provides a theme:
+1. Extract a concise, memorable title (2-6 words) that captures the essence
+2. Include "themeTitle" in your response with this extracted title
+3. Examples:
+   - "Songs that remind you of summer road trips" → "Summer Road Trip Songs"
+   - "The theme is 'guilty pleasures' - songs you're embarrassed to admit you love" → "Guilty Pleasures"
+   - "I need a song about heartbreak but not too sad" → "Bittersweet Heartbreak"
+   - "songs from the 90s that still slap" → "90s Bangers"
+
 === FUNNEL SYSTEM ===
 Songs progress through a 4-tier funnel:
   [PICK]         1 song  - The final submission
@@ -312,6 +332,8 @@ Return ONLY valid JSON (no markdown, no commentary outside the JSON):
   ],
   "message": "Your conversational response. Acknowledge their input, explain any swaps.",
   "interpretation": "Your interpretation of the theme (only include on first response)",
+  "themeTitle": "Concise 2-6 word theme title (only include when theme is first provided)",
+  "needsTheme": false,
   "action": null,
   "extractedPreferences": [
     {

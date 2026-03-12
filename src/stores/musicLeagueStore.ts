@@ -47,6 +47,10 @@ function songExistsIn(song: { title: string; artist: string }, songs: Array<{ ti
 
 // Generate a title from the raw theme text
 function generateThemeTitle(rawTheme: string): string {
+  // Handle empty/placeholder themes
+  if (!rawTheme || rawTheme.trim() === '') {
+    return 'New Theme'
+  }
   // Take first line, trim, and limit to 50 chars
   const firstLine = rawTheme.split('\n')[0].trim()
   return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine
